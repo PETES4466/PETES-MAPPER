@@ -190,9 +190,10 @@ export default function App() {
   const handlePixelMove = useCallback((id, newX, newY) => {
     setPixels(prev => {
       const next = prev.map(p => p.id === id ? { ...p, x: newX, y: newY, isAuto: false } : p);
-      return assignPorts(next, wiringOrder);
+      return assignPortsWithLetterMap(next, wiringOrder, letterPortMap, disconnectedAfter);
     });
-  }, [wiringOrder]);
+    setLastAction({ type: 'move', id, x: newX, y: newY });
+  }, [wiringOrder, letterPortMap, disconnectedAfter]);
 
   // ── Pixel select ──────────────────────────────────────────────────────────
   const handlePixelSelect = useCallback((ids, multi = false) => {
@@ -215,19 +216,41 @@ export default function App() {
   // ── Wire click ────────────────────────────────────────────────────────────
   const handleWireClick = useCallback((pixelId) => {
     setPendingWire(prev => prev.includes(pixelId) ? prev : [...prev, pixelId]);
+    setLastAction({ type: 'wire', pixelId });
   }, []);
 
   // ── Break wiring ──────────────────────────────────────────────────────────
   const handleBreakWiring = useCallback(() => {
     if (!selectedIds.size) return;
-    setPixels(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, wiringBroken: true } : p));
-  }, [selectedIds]);
+    const newPixels = pixels.map(p => selectedIds.has(p.id) ? { ...p, wiringBroken: true } : p);
+    setPixels(newPixels);
+    saveToHistory(newPixels, wiringOrder, portNodes, letterPortMap, disconnectedAfter);
+  }, [selectedIds, pixels, wiringOrder, portNodes, letterPortMap, disconnectedAfter, saveToHistory]);
 
   // ── Restore wiring ────────────────────────────────────────────────────────
   const handleRestoreWiring = useCallback(() => {
     if (!selectedIds.size) return;
-    setPixels(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p));
-  }, [selectedIds]);
+    const newPixels = pixels.map(p => selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p);
+    setPixels(newPixels);
+    saveToHistory(newPixels, wiringOrder, portNodes, letterPortMap, disconnectedAfter);
+  }, [selectedIds, pixels, wiringOrder, portNodes, letterPortMap, disconnectedAfter, saveToHistory]);
+
+  // ── Disconnect wiring between letters ─────────────────────────────────────
+  const handleDisconnectLetterWiring = useCallback(() => {
+    if (selectedLetterIndex === null) return;
+    const newDisconnected = new Set(disconnectedAfter);
+    if (newDisconnected.has(selectedLetterIndex)) {
+      newDisconnected.delete(selectedLetterIndex);
+    } else {
+      newDisconnected.add(selectedLetterIndex);
+    }
+    setDisconnectedAfter(newDisconnected);
+    
+    // Re-assign ports with new disconnection
+    const wired = assignPortsWithLetterMap(pixels, wiringOrder, letterPortMap, newDisconnected);
+    setPixels(wired);
+    saveToHistory(wired, wiringOrder, portNodes, letterPortMap, newDisconnected);
+  }, [selectedLetterIndex, disconnectedAfter, pixels, wiringOrder, letterPortMap, portNodes, saveToHistory]);
 
   // ── Add pixel at position ─────────────────────────────────────────────────
   const handleAddPixel = useCallback((xMm, yMm) => {
@@ -244,10 +267,62 @@ export default function App() {
     };
     const allPx = [...pixels, newPx];
     const order = [...wiringOrder, newPx.id];
-    setPixels(assignPorts(allPx, order));
+    const wired = assignPortsWithLetterMap(allPx, order, letterPortMap, disconnectedAfter);
+    setPixels(wired);
     setWiringOrder(order);
     setSelectedIds(new Set([newPx.id]));
-  }, [pixels, wiringOrder]);
+    setLastAction({ type: 'addPixel', id: newPx.id });
+    saveToHistory(wired, order, portNodes, letterPortMap, disconnectedAfter);
+  }, [pixels, wiringOrder, letterPortMap, disconnectedAfter, portNodes, saveToHistory]);
+
+  // ── Right-click escape (cancel last operation) ────────────────────────────
+  const handleEscape = useCallback(() => {
+    if (lastAction) {
+      if (lastAction.type === 'addPixel') {
+        // Remove the last added pixel
+        const newPixels = pixels.filter(p => p.id !== lastAction.id);
+        const newOrder = wiringOrder.filter(id => id !== lastAction.id);
+        setPixels(assignPortsWithLetterMap(newPixels, newOrder, letterPortMap, disconnectedAfter));
+        setWiringOrder(newOrder);
+        setSelectedIds(new Set());
+      } else if (lastAction.type === 'wire') {
+        // Remove last pixel from pending wire
+        setPendingWire(prev => prev.slice(0, -1));
+      }
+      setLastAction(null);
+    } else {
+      // Clear selection or pending operations
+      setSelectedIds(new Set());
+      setPendingWire([]);
+      setSelectedPortIndex(null);
+      setActivePortTool(false);
+    }
+  }, [lastAction, pixels, wiringOrder, letterPortMap, disconnectedAfter]);
+
+  // ── Port node drag ────────────────────────────────────────────────────────
+  const handlePortNodeMove = useCallback((portIndex, newX, newY) => {
+    setPortNodes(prev => prev.map(p => 
+      p.portIndex === portIndex ? { ...p, x: newX, y: newY } : p
+    ));
+  }, []);
+
+  // ── Connect port to letter ────────────────────────────────────────────────
+  const handleConnectPortToLetter = useCallback((portIndex, letterIndex) => {
+    const newMap = { ...letterPortMap, [letterIndex]: portIndex };
+    setLetterPortMap(newMap);
+    
+    // Re-assign ports with new mapping
+    const wired = assignPortsWithLetterMap(pixels, wiringOrder, newMap, disconnectedAfter);
+    setPixels(wired);
+    setSelectedPortIndex(null);
+    saveToHistory(wired, wiringOrder, portNodes, newMap, disconnectedAfter);
+  }, [letterPortMap, pixels, wiringOrder, disconnectedAfter, portNodes, saveToHistory]);
+
+  // ── Select port for connection ────────────────────────────────────────────
+  const handleSelectPort = useCallback((portIndex) => {
+    setSelectedPortIndex(prev => prev === portIndex ? null : portIndex);
+    setActivePortTool(true);
+  }, []);
 
   // ── Copy / Paste / Delete ─────────────────────────────────────────────────
   const handleCopy   = useCallback(() => setClipboard(pixels.filter(p => selectedIds.has(p.id))), [pixels, selectedIds]);
