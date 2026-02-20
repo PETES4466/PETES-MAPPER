@@ -1,85 +1,99 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { PORT_COLORS } from '../utils/wireUtils';
+import { PORT_COLORS, LETTER_COLORS } from '../utils/wireUtils';
 
-const FIRST_COLOR = '#00ff88';
-const LAST_COLOR  = '#ff6b6b';
-const SEL_COLOR   = 'rgba(255,255,255,0.9)';
-const WIRING_COLOR = 'rgba(255,200,0,0.6)';
-const PENDING_COLOR = 'rgba(0,212,255,0.9)';
-const GUIDE_FILL  = 'rgba(30,50,120,0.25)';
-const GUIDE_STROKE = 'rgba(80,120,220,0.25)';
-const AUTO_PIXEL_COLOR  = '#00d4ff';
-const MANUAL_PIXEL_COLOR = '#ff9f43';
+const WIRING_COLOR   = 'rgba(255,200,30,0.7)';
+const PENDING_COLOR  = 'rgba(0,212,255,0.9)';
+const GUIDE_FILL     = 'rgba(15,40,100,0.35)';
+const GUIDE_STROKE   = '#1E7FFF';        // thick blue guide border
+const SEL_RING_COLOR = 'rgba(255,255,255,0.9)';
 
 export default function LedCanvas({
   pixels, wiringOrder, guideCommands,
   selectedIds, activeTool, pixelOdMm,
   showNumbers, showWiring, showGuide,
   wiringMode, pendingWire,
-  onPixelMove, onPixelSelect, onWireClick
+  isBreakApart, selectedLetterIndex,
+  onPixelMove, onPixelSelect, onWireClick,
+  onLetterSelect, onAddPixel,
+  zoomRef
 }) {
   const containerRef = useRef(null);
   const canvasRef    = useRef(null);
-  const scaleRef     = useRef(2);       // mm → screen px
+  const scaleRef     = useRef(2);
   const offsetRef    = useRef({ x: 40, y: 40 });
   const dprRef       = useRef(1);
 
-  // Interaction state refs (avoid re-renders during drag)
-  const isDraggingRef  = useRef(false);
-  const dragPixelRef   = useRef(null);
-  const dragStartRef   = useRef({ mx: 0, my: 0, px: 0, py: 0 });
-  const isPanningRef   = useRef(false);
-  const panStartRef    = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
-  const livePixelRef   = useRef({}); // id → {x,y} for live drag preview
+  // Interaction refs
+  const isDraggingRef    = useRef(false);
+  const dragPixelRef     = useRef(null);
+  const dragStartRef     = useRef({});
+  const isPanningRef     = useRef(false);
+  const panStartRef      = useRef({});
+  const isRubberBandRef  = useRef(false);
+  const rubberStartRef   = useRef({ mx: 0, my: 0 });
+  const rubberCurRef     = useRef({ mx: 0, my: 0 });
+  const livePixelRef     = useRef({});
 
-  // Keep latest props accessible in event handlers without re-creating them
+  // Props accessible in event handlers via refs
   const pixelsRef       = useRef(pixels);
-  const wiringOrderRef  = useRef(wiringOrder);
-  const guideRef        = useRef(guideCommands);
-  const selectedRef     = useRef(selectedIds);
-  const activeToolRef   = useRef(activeTool);
-  const pendingWireRef  = useRef(pendingWire);
-  const showNumbersRef  = useRef(showNumbers);
-  const showWiringRef   = useRef(showWiring);
+  const wiringRef       = useRef(wiringOrder);
+  const guidesRef       = useRef(guideCommands);
+  const selRef          = useRef(selectedIds);
+  const toolRef         = useRef(activeTool);
+  const pendingRef      = useRef(pendingWire);
+  const showNumRef      = useRef(showNumbers);
+  const showWireRef     = useRef(showWiring);
   const showGuideRef    = useRef(showGuide);
-  const pixelOdRef      = useRef(pixelOdMm);
+  const odRef           = useRef(pixelOdMm);
+  const breakApartRef   = useRef(isBreakApart);
+  const selLetterRef    = useRef(selectedLetterIndex);
 
-  pixelsRef.current      = pixels;
-  wiringOrderRef.current = wiringOrder;
-  guideRef.current       = guideCommands;
-  selectedRef.current    = selectedIds;
-  activeToolRef.current  = activeTool;
-  pendingWireRef.current = pendingWire;
-  showNumbersRef.current = showNumbers;
-  showWiringRef.current  = showWiring;
-  showGuideRef.current   = showGuide;
-  pixelOdRef.current     = pixelOdMm;
+  pixelsRef.current     = pixels;
+  wiringRef.current     = wiringOrder;
+  guidesRef.current     = guideCommands;
+  selRef.current        = selectedIds;
+  toolRef.current       = activeTool;
+  pendingRef.current    = pendingWire;
+  showNumRef.current    = showNumbers;
+  showWireRef.current   = showWiring;
+  showGuideRef.current  = showGuide;
+  odRef.current         = pixelOdMm;
+  breakApartRef.current = isBreakApart;
+  selLetterRef.current  = selectedLetterIndex;
 
-  // ── Coordinate helpers ──────────────────────────────────────────────────
-  const mmToScreen = (x, y) => ({
+  const toScreen = (x, y) => ({
     sx: x * scaleRef.current + offsetRef.current.x,
     sy: y * scaleRef.current + offsetRef.current.y
   });
-  const screenToMm = (sx, sy) => ({
+  const toMm = (sx, sy) => ({
     x: (sx - offsetRef.current.x) / scaleRef.current,
     y: (sy - offsetRef.current.y) / scaleRef.current
   });
 
-  // Hit-test a canvas mouse position against pixels
-  const hitPixel = (mx, my) => {
-    const { x, y } = screenToMm(mx, my);
-    const r = pixelOdRef.current / 2 + 1;
-    // Use livePixelRef for dragged pixel
+  function hitPixel(mx, my) {
+    const { x, y } = toMm(mx, my);
+    const r = odRef.current / 2 + 1.5;
     for (const p of pixelsRef.current) {
       const px = livePixelRef.current[p.id]?.x ?? p.x;
       const py = livePixelRef.current[p.id]?.y ?? p.y;
-      const dx = px - x, dy = py - y;
-      if (dx*dx + dy*dy <= r*r) return p;
+      if ((px - x) ** 2 + (py - y) ** 2 <= r * r) return p;
     }
     return null;
-  };
+  }
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  function pixelsInRect(x1, y1, x2, y2) {
+    const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+    const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+    return pixelsRef.current
+      .filter(p => {
+        const px = livePixelRef.current[p.id]?.x ?? p.x;
+        const py = livePixelRef.current[p.id]?.y ?? p.y;
+        return px >= minX && px <= maxX && py >= minY && py <= maxY;
+      })
+      .map(p => p.id);
+  }
+
+  // ── Main render ─────────────────────────────────────────────────────────
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -89,237 +103,300 @@ export default function LedCanvas({
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Background
     ctx.fillStyle = '#0d0e1a';
     ctx.fillRect(0, 0, W, H);
-
-    // Grid
     drawGrid(ctx, W, H);
 
-    const scale  = scaleRef.current;
-    const offset = offsetRef.current;
-    const pixels = pixelsRef.current;
-    const wOrder = wiringOrderRef.current;
-    const guides = guideRef.current;
-    const selIds = selectedRef.current;
-    const pending = pendingWireRef.current;
-    const od     = pixelOdRef.current;
-    const r      = (od / 2) * scale;
+    const scale   = scaleRef.current;
+    const offset  = offsetRef.current;
+    const pixels  = pixelsRef.current;
+    const guides  = guidesRef.current;
+    const wOrder  = wiringRef.current;
+    const selIds  = selRef.current;
+    const pending = pendingRef.current;
+    const od      = odRef.current;
+    const r       = (od / 2) * scale;
+    const breakApart   = breakApartRef.current;
+    const selLetter    = selLetterRef.current;
 
-    // Letter guides
-    if (showGuideRef.current) {
+    // ── Letter guide paths ────────────────────────────────────────────────
+    if (showGuideRef.current && guides.length) {
+      // Fill
       ctx.save();
       ctx.fillStyle = GUIDE_FILL;
-      ctx.strokeStyle = GUIDE_STROKE;
-      ctx.lineWidth = 1;
       for (const g of guides) {
         ctx.beginPath();
-        for (const c of g.commands) {
-          const sx = c.x * scale + offset.x;
-          const sy = c.y * scale + offset.y;
-          switch (c.type) {
-            case 'M': ctx.moveTo(sx, sy); break;
-            case 'L': ctx.lineTo(sx, sy); break;
-            case 'C':
-              ctx.bezierCurveTo(
-                c.x1*scale+offset.x, c.y1*scale+offset.y,
-                c.x2*scale+offset.x, c.y2*scale+offset.y,
-                sx, sy); break;
-            case 'Q':
-              ctx.quadraticCurveTo(c.x1*scale+offset.x, c.y1*scale+offset.y, sx, sy); break;
-            case 'Z': ctx.closePath(); break;
-            default: break;
-          }
-        }
+        drawPathCmds(ctx, g.commands, scale, offset);
         ctx.fill('evenodd');
+      }
+      ctx.restore();
+
+      // Thick blue stroke – constant 3px regardless of zoom
+      ctx.save();
+      ctx.strokeStyle = GUIDE_STROKE;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = 'rgba(30,127,255,0.5)';
+      ctx.shadowBlur = 8;
+      for (const g of guides) {
+        ctx.beginPath();
+        drawPathCmds(ctx, g.commands, scale, offset);
         ctx.stroke();
       }
+      ctx.shadowBlur = 0;
       ctx.restore();
     }
 
-    // Wiring path
-    if (showWiringRef.current && wOrder.length > 1) {
-      const pixMap = {};
-      for (const p of pixels) pixMap[p.id] = p;
+    // ── Wiring ────────────────────────────────────────────────────────────
+    if (showWireRef.current && wOrder.length > 1) {
+      const pmap = buildMap(pixels);
       ctx.save();
       ctx.strokeStyle = WIRING_COLOR;
-      ctx.lineWidth = Math.max(1, scale * 0.4);
-      ctx.setLineDash([3 * scale * 0.4, 3 * scale * 0.4]);
+      ctx.lineWidth = Math.max(1, scale * 0.35);
+      ctx.setLineDash([scale * 0.5, scale * 0.5]);
       ctx.beginPath();
-      let firstDrawn = false;
-      for (const id of wOrder) {
-        const p = pixMap[id];
-        if (!p) continue;
+      let prevBroken = false;
+      wOrder.forEach((id, i) => {
+        const p = pmap[id]; if (!p) return;
         const px = livePixelRef.current[id]?.x ?? p.x;
         const py = livePixelRef.current[id]?.y ?? p.y;
-        const sx = px * scale + offset.x;
-        const sy = py * scale + offset.y;
-        if (!firstDrawn) { ctx.moveTo(sx, sy); firstDrawn = true; }
+        const { sx, sy } = toScreen(px, py);
+        if (i === 0 || prevBroken || p.wiringBroken) ctx.moveTo(sx, sy);
         else ctx.lineTo(sx, sy);
-      }
+        prevBroken = p.wiringBroken ?? false;
+      });
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
     }
 
-    // Pending wire
+    // ── Pending wire ──────────────────────────────────────────────────────
     if (pending.length > 1) {
-      const pixMap = {};
-      for (const p of pixels) pixMap[p.id] = p;
+      const pmap = buildMap(pixels);
       ctx.save();
       ctx.strokeStyle = PENDING_COLOR;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = PENDING_COLOR; ctx.shadowBlur = 6;
       ctx.beginPath();
       let fp = true;
       for (const id of pending) {
-        const p = pixMap[id];
-        if (!p) continue;
-        const sx = p.x * scale + offset.x;
-        const sy = p.y * scale + offset.y;
-        if (fp) { ctx.moveTo(sx, sy); fp = false; }
-        else ctx.lineTo(sx, sy);
+        const p = pmap[id]; if (!p) continue;
+        const { sx, sy } = toScreen(p.x, p.y);
+        if (fp) { ctx.moveTo(sx, sy); fp = false; } else ctx.lineTo(sx, sy);
       }
       ctx.stroke();
+      ctx.shadowBlur = 0;
       ctx.restore();
     }
 
-    // Pixels
+    // ── Pixels ────────────────────────────────────────────────────────────
     for (const p of pixels) {
       const px = livePixelRef.current[p.id]?.x ?? p.x;
       const py = livePixelRef.current[p.id]?.y ?? p.y;
-      const sx = px * scale + offset.x;
-      const sy = py * scale + offset.y;
-      const isSelected = selIds.has(p.id);
-      const isPending  = pending.includes(p.id);
-      const portColor  = PORT_COLORS[Math.max(0, Math.min(7, p.portIndex ?? 0))];
+      const { sx, sy } = toScreen(px, py);
+      const isSel     = selIds.has(p.id);
+      const isPend    = pending.includes(p.id);
+      const portColor = PORT_COLORS[Math.max(0, Math.min(7, p.portIndex ?? 0))];
+      const isBroken  = p.wiringBroken ?? false;
+      const letterColor = LETTER_COLORS[(p.letterIndex ?? 0) % LETTER_COLORS.length];
+      const isSelLetter = breakApart && selLetter !== null && p.letterIndex === selLetter;
 
       ctx.save();
 
-      // Outer glow for selected
-      if (isSelected) {
-        ctx.shadowColor = SEL_COLOR;
-        ctx.shadowBlur = 8;
-      } else if (isPending) {
-        ctx.shadowColor = PENDING_COLOR;
-        ctx.shadowBlur = 10;
-      } else if (p.isFirst) {
-        ctx.shadowColor = FIRST_COLOR;
-        ctx.shadowBlur = 6;
-      } else if (p.isLast) {
-        ctx.shadowColor = LAST_COLOR;
-        ctx.shadowBlur = 6;
-      }
+      // Glow effects
+      if (isSel)           { ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 10; }
+      else if (isPend)     { ctx.shadowColor = PENDING_COLOR; ctx.shadowBlur = 12; }
+      else if (p.isFirst)  { ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 12; }
+      else if (p.isLast)   { ctx.shadowColor = '#ff6b6b'; ctx.shadowBlur = 12; }
+      else if (isSelLetter){ ctx.shadowColor = letterColor; ctx.shadowBlur = 8; }
 
-      // Circle fill
+      // Main circle
       ctx.beginPath();
       ctx.arc(sx, sy, r, 0, Math.PI * 2);
-      const fillColor = isSelected ? SEL_COLOR : isPending ? PENDING_COLOR : portColor;
-      ctx.fillStyle = fillColor + (isSelected || isPending ? '' : 'cc');
+      let fill = isSel ? 'rgba(255,255,255,0.85)'
+               : isPend ? 'rgba(0,212,255,0.85)'
+               : portColor + 'cc';
+      if (isBroken) fill = 'rgba(80,20,20,0.8)';
+      ctx.fillStyle = fill;
       ctx.fill();
 
-      // Border outline
-      ctx.strokeStyle = isSelected ? '#ffffff' : isPending ? '#00d4ff' : p.isAuto ? portColor : MANUAL_PIXEL_COLOR;
-      ctx.lineWidth = isSelected ? 2 : 1.5;
+      // Stroke ring
+      ctx.strokeStyle = isSel ? '#ffffff' : isPend ? '#00d4ff'
+                      : isBroken ? '#ff6b6b' : p.isAuto ? portColor : '#ff9f43';
+      ctx.lineWidth = isSel ? 2.5 : isBroken ? 2 : 1.5;
       ctx.stroke();
-
+      ctx.shadowBlur = 0;
       ctx.restore();
 
-      // First/Last markers
-      if (p.isFirst && r > 4) {
+      // ── Break-apart letter ring ─────────────────────────────────────────
+      if (breakApart) {
         ctx.save();
-        ctx.fillStyle = FIRST_COLOR;
-        ctx.font = `bold ${Math.max(7, r * 0.9)}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('F', sx, sy);
-        ctx.restore();
-      } else if (p.isLast && r > 4) {
-        ctx.save();
-        ctx.fillStyle = LAST_COLOR;
-        ctx.font = `bold ${Math.max(7, r * 0.9)}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('L', sx, sy);
+        ctx.strokeStyle = letterColor;
+        ctx.lineWidth = isSelLetter ? 3 : 1.5;
+        ctx.globalAlpha = isSelLetter ? 1 : 0.5;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r + (isSelLetter ? 4 : 2), 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
       }
 
-      // Manual marker dot
-      if (!p.isAuto && r > 6) {
+      // ── Broken wiring mark ──────────────────────────────────────────────
+      if (isBroken && r > 4) {
         ctx.save();
-        ctx.fillStyle = MANUAL_PIXEL_COLOR;
+        ctx.strokeStyle = '#ff6b6b';
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(sx + r * 0.55, sy - r * 0.55, 2.5, 0, Math.PI * 2);
+        ctx.moveTo(sx - r * 0.5, sy - r * 0.5); ctx.lineTo(sx + r * 0.5, sy + r * 0.5);
+        ctx.moveTo(sx + r * 0.5, sy - r * 0.5); ctx.lineTo(sx - r * 0.5, sy + r * 0.5);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // ── Manual dot ─────────────────────────────────────────────────────
+      if (!p.isAuto && !isBroken && r > 5) {
+        ctx.save();
+        ctx.fillStyle = '#ff9f43';
+        ctx.beginPath();
+        ctx.arc(sx + r * 0.6, sy - r * 0.6, 2.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
     }
 
-    // Pixel numbers
-    if (showNumbersRef.current && r > 5) {
+    // ── Prominent FIRST / LAST markers ───────────────────────────────────
+    for (const p of pixels) {
+      if (!p.isFirst && !p.isLast) continue;
+      const px = livePixelRef.current[p.id]?.x ?? p.x;
+      const py = livePixelRef.current[p.id]?.y ?? p.y;
+      const { sx, sy } = toScreen(px, py);
+      const color = p.isFirst ? '#00ff88' : '#ff4444';
+      const label = p.isFirst ? 'S' : 'E';
+
       ctx.save();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `${Math.max(8, Math.min(12, r * 0.85))}px monospace`;
+      // Outer pulsing ring
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r * 1.7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Fill center triangle / arrow
+      ctx.fillStyle = color;
+      const fs = Math.max(9, r * 1.0);
+      ctx.font = `bold ${fs}px monospace`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.fillText(label, sx, sy);
+
+      // Label above
+      if (r > 6) {
+        ctx.font = `bold ${Math.max(8, r * 0.7)}px sans-serif`;
+        ctx.fillStyle = color;
+        ctx.fillText(p.isFirst ? `▶ ${p.letter}` : `${p.letter} ◀`, sx, sy - r * 2.3);
+      }
+      ctx.restore();
+    }
+
+    // ── Pixel numbers ─────────────────────────────────────────────────────
+    if (showNumRef.current && r > 5) {
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `${Math.max(7, Math.min(11, r * 0.8))}px monospace`;
       for (const p of pixels) {
-        if (p.wiringOrder < 0) continue;
+        if (p.wiringOrder < 0 || p.isFirst || p.isLast) continue;
         const px = livePixelRef.current[p.id]?.x ?? p.x;
         const py = livePixelRef.current[p.id]?.y ?? p.y;
-        const sx = px * scale + offset.x;
-        const sy = py * scale + offset.y;
+        const { sx, sy } = toScreen(px, py);
+        ctx.fillStyle = (p.portIndex ?? 0) < 3 ? '#ffffff' : '#ffffff';
         ctx.fillText(p.wiringOrder, sx, sy);
       }
       ctx.restore();
     }
 
-    // Placeholder
-    if (pixels.length === 0 && guides.length === 0) {
+    // ── Rubber band ───────────────────────────────────────────────────────
+    if (isRubberBandRef.current) {
+      const rs = rubberStartRef.current;
+      const rc = rubberCurRef.current;
       ctx.save();
-      ctx.fillStyle = 'rgba(107,114,128,0.5)';
-      ctx.font = '16px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Upload a font, enter text, and click Generate', W/2, H/2 - 12);
-      ctx.font = '12px system-ui';
-      ctx.fillText('Scroll to zoom · Middle-drag or Pan tool to move', W/2, H/2 + 12);
+      ctx.strokeStyle = 'rgba(0,212,255,0.9)';
+      ctx.fillStyle   = 'rgba(0,212,255,0.07)';
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([4, 4]);
+      const rx = Math.min(rs.mx, rc.mx), ry = Math.min(rs.my, rc.my);
+      const rw = Math.abs(rc.mx - rs.mx), rh = Math.abs(rc.my - rs.my);
+      ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeRect(rx, ry, rw, rh);
+      ctx.setLineDash([]);
       ctx.restore();
     }
-  }, []); // stable - always reads from refs
 
+    // Placeholder
+    if (!pixels.length && !guides.length) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(107,114,128,0.45)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '15px system-ui';
+      ctx.fillText('Upload a font, enter text, and click Generate', W / 2, H / 2 - 14);
+      ctx.font = '11px system-ui';
+      ctx.fillText('Scroll=Zoom · Drag=Pan · Right-click=Add pixel', W / 2, H / 2 + 10);
+      ctx.restore();
+    }
+  }, []);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
   function drawGrid(ctx, W, H) {
     const scale = scaleRef.current;
     const { x: ox, y: oy } = offsetRef.current;
     const gridMm = scale >= 4 ? 10 : scale >= 1 ? 20 : 50;
     const gridPx = gridMm * scale;
     ctx.save();
-    ctx.strokeStyle = 'rgba(42,45,74,0.6)';
+    ctx.strokeStyle = 'rgba(42,45,74,0.55)';
     ctx.lineWidth = 0.5;
-    const startX = ((ox % gridPx) + gridPx) % gridPx;
-    const startY = ((oy % gridPx) + gridPx) % gridPx;
-    for (let x = startX; x <= W; x += gridPx) {
+    for (let x = ((ox % gridPx) + gridPx) % gridPx; x <= W; x += gridPx) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     }
-    for (let y = startY; y <= H; y += gridPx) {
+    for (let y = ((oy % gridPx) + gridPx) % gridPx; y <= H; y += gridPx) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
     ctx.restore();
   }
 
-  // ── Resize observer ─────────────────────────────────────────────────────
+  function drawPathCmds(ctx, cmds, scale, offset) {
+    for (const c of cmds) {
+      const sx = c.x * scale + offset.x;
+      const sy = c.y * scale + offset.y;
+      switch (c.type) {
+        case 'M': ctx.moveTo(sx, sy); break;
+        case 'L': ctx.lineTo(sx, sy); break;
+        case 'C':
+          ctx.bezierCurveTo(c.x1*scale+offset.x, c.y1*scale+offset.y,
+            c.x2*scale+offset.x, c.y2*scale+offset.y, sx, sy); break;
+        case 'Q':
+          ctx.quadraticCurveTo(c.x1*scale+offset.x, c.y1*scale+offset.y, sx, sy); break;
+        case 'Z': ctx.closePath(); break;
+        default: break;
+      }
+    }
+  }
+
+  function buildMap(arr) {
+    const m = {}; for (const p of arr) m[p.id] = p; return m;
+  }
+
+  // ── Resize observer ──────────────────────────────────────────────────────
   useEffect(() => {
     const container = containerRef.current;
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
-
     const ro = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
+      for (const e of entries) {
+        const { width, height } = e.contentRect;
         const dpr = window.devicePixelRatio || 1;
         dprRef.current = dpr;
-        canvas.width  = width  * dpr;
-        canvas.height = height * dpr;
-        canvas.style.width  = width  + 'px';
-        canvas.style.height = height + 'px';
+        canvas.width = width * dpr; canvas.height = height * dpr;
+        canvas.style.width = width + 'px'; canvas.style.height = height + 'px';
         render();
       }
     });
@@ -327,21 +404,48 @@ export default function LedCanvas({
     return () => ro.disconnect();
   }, [render]);
 
-  // Re-render when any display data changes
-  useEffect(() => { render(); }, [pixels, wiringOrder, guideCommands, selectedIds, showNumbers, showWiring, showGuide, pendingWire, pixelOdMm, render]);
+  // Re-render on props change
+  useEffect(() => { render(); }, [
+    pixels, wiringOrder, guideCommands, selectedIds,
+    showNumbers, showWiring, showGuide, pendingWire, pixelOdMm,
+    isBreakApart, selectedLetterIndex, render
+  ]);
 
-  // ── Mouse handlers ──────────────────────────────────────────────────────
-  const getCanvasPos = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    return { mx: e.clientX - rect.left, my: e.clientY - rect.top };
+  // ── Zoom-to-letter callback ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!zoomRef) return;
+    zoomRef.current = (letterIndex) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const { width: W, height: H } = canvas.getBoundingClientRect();
+      const { computeLetterZoom } = require('../utils/wireUtils');
+      const result = computeLetterZoom(letterIndex, pixelsRef.current, W, H, 60);
+      if (result) {
+        scaleRef.current = result.scale;
+        offsetRef.current = result.offset;
+        render();
+      }
+    };
+  }, [zoomRef, render]);
+
+  // ── Event handlers ───────────────────────────────────────────────────────
+  const getPos = (e) => {
+    const r = canvasRef.current.getBoundingClientRect();
+    return { mx: e.clientX - r.left, my: e.clientY - r.top };
   };
 
   const handleMouseDown = (e) => {
     e.preventDefault();
-    const { mx, my } = getCanvasPos(e);
-    const tool = activeToolRef.current;
+    const { mx, my } = getPos(e);
+    const tool = toolRef.current;
 
-    // Middle mouse → pan
+    // Right-click → add pixel
+    if (e.button === 2) {
+      const { x, y } = toMm(mx, my);
+      onAddPixel(x, y);
+      return;
+    }
+    // Middle / Pan tool
     if (e.button === 1 || tool === 'pan') {
       isPanningRef.current = true;
       panStartRef.current = { mx, my, ox: offsetRef.current.x, oy: offsetRef.current.y };
@@ -350,109 +454,102 @@ export default function LedCanvas({
 
     if (tool === 'wire') {
       const hit = hitPixel(mx, my);
-      if (hit) {
-        onWireClick(hit.id);
-        render();
-      }
+      if (hit) { onWireClick(hit.id); render(); }
       return;
     }
 
     if (tool === 'select') {
       const hit = hitPixel(mx, my);
       if (hit) {
-        // Select + start drag
+        // Break-apart: clicking a pixel selects its letter
+        if (breakApartRef.current) {
+          onLetterSelect(hit.letterIndex ?? 0);
+          return;
+        }
         onPixelSelect([hit.id], e.shiftKey);
         isDraggingRef.current = true;
-        const { x: hx, y: hy } = screenToMm(mx, my);
-        dragStartRef.current = { mx, my, px: hit.x, py: hit.y };
-        dragPixelRef.current = hit;
+        dragStartRef.current  = { mx, my };
+        dragPixelRef.current  = hit;
       } else {
-        // Deselect
-        onPixelSelect([], false);
+        // Start rubber-band selection
+        if (!e.shiftKey) onPixelSelect([], false);
+        isRubberBandRef.current = true;
+        rubberStartRef.current  = { mx, my };
+        rubberCurRef.current    = { mx, my };
       }
     }
   };
 
   const handleMouseMove = (e) => {
-    const { mx, my } = getCanvasPos(e);
+    const { mx, my } = getPos(e);
 
     if (isPanningRef.current) {
       const ps = panStartRef.current;
       offsetRef.current = { x: ps.ox + (mx - ps.mx), y: ps.oy + (my - ps.my) };
-      render();
-      return;
+      render(); return;
     }
-
     if (isDraggingRef.current && dragPixelRef.current) {
-      const ds = dragStartRef.current;
       const dp = dragPixelRef.current;
-      const dxScreen = mx - ds.mx;
-      const dyScreen = my - ds.my;
-      const newX = dp.x + dxScreen / scaleRef.current;
-      const newY = dp.y + dyScreen / scaleRef.current;
+      const ds = dragStartRef.current;
+      const newX = dp.x + (mx - ds.mx) / scaleRef.current;
+      const newY = dp.y + (my - ds.my) / scaleRef.current;
       livePixelRef.current = { ...livePixelRef.current, [dp.id]: { x: newX, y: newY } };
-      render();
+      render(); return;
+    }
+    if (isRubberBandRef.current) {
+      rubberCurRef.current = { mx, my };
+      render(); return;
     }
 
     // Cursor
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const tool = activeToolRef.current;
-    if (tool === 'pan') { canvas.style.cursor = 'grab'; return; }
-    if (tool === 'wire') { canvas.style.cursor = 'crosshair'; return; }
-    const hit = hitPixel(mx, my);
-    canvas.style.cursor = hit ? (isDraggingRef.current ? 'grabbing' : 'grab') : 'default';
+    if (toolRef.current === 'pan') { canvas.style.cursor = 'grab'; return; }
+    if (toolRef.current === 'wire') { canvas.style.cursor = 'crosshair'; return; }
+    canvas.style.cursor = hitPixel(mx, my) ? 'grab' : 'default';
   };
 
   const handleMouseUp = (e) => {
-    if (isPanningRef.current) {
-      isPanningRef.current = false;
-      return;
-    }
+    if (isPanningRef.current) { isPanningRef.current = false; return; }
     if (isDraggingRef.current && dragPixelRef.current) {
       const dp = dragPixelRef.current;
       const live = livePixelRef.current[dp.id];
-      if (live) {
-        onPixelMove(dp.id, live.x, live.y);
-        livePixelRef.current = {};
-      }
-      isDraggingRef.current = false;
-      dragPixelRef.current = null;
+      if (live) { onPixelMove(dp.id, live.x, live.y); livePixelRef.current = {}; }
+      isDraggingRef.current = false; dragPixelRef.current = null;
+    }
+    if (isRubberBandRef.current) {
+      isRubberBandRef.current = false;
+      const rs = rubberStartRef.current, rc = rubberCurRef.current;
+      const mmA = toMm(rs.mx, rs.my), mmB = toMm(rc.mx, rc.my);
+      const ids = pixelsInRect(mmA.x, mmA.y, mmB.x, mmB.y);
+      if (ids.length) onPixelSelect(ids, e.shiftKey);
+      render();
     }
   };
 
   const handleWheel = (e) => {
     e.preventDefault();
-    const { mx, my } = getCanvasPos(e);
-    const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
-    const newScale = Math.min(20, Math.max(0.2, scaleRef.current * zoomFactor));
-    // Zoom toward mouse position
-    const ox = offsetRef.current.x;
-    const oy = offsetRef.current.y;
+    const { mx, my } = getPos(e);
+    const factor = e.deltaY < 0 ? 1.12 : 0.89;
+    const ns = Math.min(25, Math.max(0.15, scaleRef.current * factor));
+    const ox = offsetRef.current.x, oy = offsetRef.current.y;
     offsetRef.current = {
-      x: mx - (mx - ox) * (newScale / scaleRef.current),
-      y: my - (my - oy) * (newScale / scaleRef.current)
+      x: mx - (mx - ox) * (ns / scaleRef.current),
+      y: my - (my - oy) * (ns / scaleRef.current)
     };
-    scaleRef.current = newScale;
+    scaleRef.current = ns;
     render();
   };
 
-  const handleContextMenu = (e) => e.preventDefault();
-
   return (
-    <div
-      ref={containerRef}
-      className="canvas-container"
-      data-testid="led-canvas-container"
-    >
-      <canvas
-        ref={canvasRef}
+    <div ref={containerRef} className="canvas-container" data-testid="led-canvas-container">
+      <canvas ref={canvasRef}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
-        onContextMenu={handleContextMenu}
+        onContextMenu={e => e.preventDefault()}
         data-testid="led-canvas"
       />
     </div>
