@@ -102,6 +102,18 @@ export default function LedCanvas({
     return null;
   }
 
+  function hitPortNode(mx, my) {
+    const ports = portNodesRef.current || [];
+    const portR = PORT_NODE_SIZE / 2 / scaleRef.current; // Convert screen px to mm
+    for (const port of ports) {
+      const px = livePortRef.current[port.portIndex]?.x ?? port.x;
+      const py = livePortRef.current[port.portIndex]?.y ?? port.y;
+      const { x, y } = toMm(mx, my);
+      if ((px - x) ** 2 + (py - y) ** 2 <= (portR * 1.5) ** 2) return port;
+    }
+    return null;
+  }
+
   function pixelsInRect(x1, y1, x2, y2) {
     const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
     const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
