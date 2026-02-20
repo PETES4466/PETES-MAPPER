@@ -25,7 +25,9 @@ export default function ToolPanel({
   isGenerating, onGenerate,
   onDelete, onCopy, onPaste, onBreakWiring, onRestoreWiring,
   isBreakApart, onBreakApartToggle,
-  clipboardCount, selectedCount, pixelCount
+  clipboardCount, selectedCount, pixelCount,
+  onUndo, canUndo,
+  onDisconnectLetterWiring, selectedLetterIndex, disconnectedAfter
 }) {
 
   const loadFontFile = useCallback((file) => {
