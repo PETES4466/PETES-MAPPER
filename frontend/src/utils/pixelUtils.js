@@ -7,8 +7,13 @@ import {
   sampleAtCount
 } from './fontParser';
 
-const BORDER_INTERNAL = 10; // work units per mm for border tracing
-const FILL_INTERNAL   = 5;  // work units per mm for fill detection (lower for speed)
+// Adaptive scale: cap canvas at 1200px for large fonts
+function getFillScale(fontSizeMm) {
+  return Math.min(5, 1200 / Math.max(fontSizeMm, 100));
+}
+function getBorderScale(fontSizeMm) {
+  return Math.min(10, 2000 / Math.max(fontSizeMm, 100));
+}
 
 let _pixelCounter = 0;
 function newId() { return `px_${++_pixelCounter}_${Date.now()}`; }
