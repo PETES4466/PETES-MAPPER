@@ -578,17 +578,45 @@ export default function LedCanvas({
     const { mx, my } = getPos(e);
     const tool = toolRef.current;
 
-    // Right-click → add pixel
+    // Right-click handling: first adds pixel, second escapes
     if (e.button === 2) {
+      const now = Date.now();
+      if (now - lastRightClickRef.current < 500) {
+        // Second right-click within 500ms = escape
+        lastRightClickRef.current = 0;
+        onEscape?.();
+        return;
+      }
+      lastRightClickRef.current = now;
       const { x, y } = toMm(mx, my);
       onAddPixel(x, y);
       return;
     }
+    
     // Middle / Pan tool
     if (e.button === 1 || tool === 'pan') {
       isPanningRef.current = true;
       panStartRef.current = { mx, my, ox: offsetRef.current.x, oy: offsetRef.current.y };
       return;
+    }
+
+    // Check if clicking on a port node first
+    const hitPort = hitPortNode(mx, my);
+    if (hitPort) {
+      isDraggingPortRef.current = true;
+      dragPortIdxRef.current = hitPort.portIndex;
+      dragStartRef.current = { mx, my };
+      return;
+    }
+
+    // If a port is selected and we're clicking on a pixel's start node, connect them
+    const selPort = selPortIdxRef.current;
+    if (selPort !== null) {
+      const hit = hitPixel(mx, my);
+      if (hit && hit.isFirst) {
+        onConnectPortToLetter?.(selPort, hit.letterIndex ?? 0);
+        return;
+      }
     }
 
     if (tool === 'wire') {
@@ -627,6 +655,20 @@ export default function LedCanvas({
       offsetRef.current = { x: ps.ox + (mx - ps.mx), y: ps.oy + (my - ps.my) };
       render(); return;
     }
+    
+    // Port dragging
+    if (isDraggingPortRef.current && dragPortIdxRef.current !== null) {
+      const ds = dragStartRef.current;
+      const port = portNodesRef.current?.find(p => p.portIndex === dragPortIdxRef.current);
+      if (port) {
+        const newX = port.x + (mx - ds.mx) / scaleRef.current;
+        const newY = port.y + (my - ds.my) / scaleRef.current;
+        livePortRef.current = { ...livePortRef.current, [dragPortIdxRef.current]: { x: newX, y: newY } };
+        render();
+      }
+      return;
+    }
+    
     if (isDraggingRef.current && dragPixelRef.current) {
       const dp = dragPixelRef.current;
       const ds = dragStartRef.current;
