@@ -384,12 +384,17 @@ export default function App() {
         isBreakApart={isBreakApart} onBreakApartToggle={() => setIsBreakApart(v => !v)}
         clipboardCount={clipboard.length} selectedCount={selectedIds.size}
         pixelCount={pixels.length}
+        onUndo={handleUndo}
+        canUndo={historyIndex > 0}
+        onDisconnectLetterWiring={handleDisconnectLetterWiring}
+        selectedLetterIndex={selectedLetterIndex}
+        disconnectedAfter={disconnectedAfter}
       />
 
       <div className="canvas-area">
         <div className="canvas-toolbar">
           <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-            Scroll=Zoom &nbsp;·&nbsp; Middle-drag/Pan=Move &nbsp;·&nbsp; Right-click=Add pixel
+            Scroll=Zoom &nbsp;·&nbsp; Middle-drag/Pan=Move &nbsp;·&nbsp; Right-click=Add pixel (2nd click=Escape)
           </span>
           <span style={{ marginLeft: 'auto', fontSize: 11 }}>
             {pixels.length > 0 && (
@@ -412,7 +417,16 @@ export default function App() {
           onPixelMove={handlePixelMove} onPixelSelect={handlePixelSelect}
           onWireClick={handleWireClick} onLetterSelect={handleLetterSelect}
           onAddPixel={handleAddPixel}
+          onEscape={handleEscape}
+          lastAction={lastAction}
           zoomRef={canvasZoomRef}
+          portNodes={portNodes}
+          onPortNodeMove={handlePortNodeMove}
+          letterPortMap={letterPortMap}
+          disconnectedAfter={disconnectedAfter}
+          selectedPortIndex={selectedPortIndex}
+          onConnectPortToLetter={handleConnectPortToLetter}
+          activePortTool={activePortTool}
         />
 
         <div className="canvas-statusbar">
@@ -426,6 +440,9 @@ export default function App() {
           {isBreakApart && selectedLetterIndex !== null && (
             <span style={{ color: 'var(--accent2)' }}>Letter selected: index {selectedLetterIndex}</span>
           )}
+          {historyIndex > 0 && (
+            <span style={{ color: 'var(--muted)' }}>Undo: <span className="status-val">{historyIndex}</span></span>
+          )}
         </div>
       </div>
 
@@ -437,6 +454,11 @@ export default function App() {
         onClearWire={() => setPendingWire([])}
         exportFormat={exportFormat} onExportFormatChange={setExportFormat}
         onExport={handleExport}
+        portNodes={portNodes}
+        letterPortMap={letterPortMap}
+        selectedPortIndex={selectedPortIndex}
+        onSelectPort={handleSelectPort}
+        text={text}
       />
     </div>
   );
