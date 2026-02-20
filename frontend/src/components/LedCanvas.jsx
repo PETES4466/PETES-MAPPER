@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { PORT_COLORS, LETTER_COLORS } from '../utils/wireUtils';
+import { PORT_COLORS, LETTER_COLORS, computeLetterZoom } from '../utils/wireUtils';
 
 const WIRING_COLOR   = 'rgba(255,200,30,0.7)';
 const PENDING_COLOR  = 'rgba(0,212,255,0.9)';
