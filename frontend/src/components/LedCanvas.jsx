@@ -687,11 +687,27 @@ export default function LedCanvas({
     if (!canvas) return;
     if (toolRef.current === 'pan') { canvas.style.cursor = 'grab'; return; }
     if (toolRef.current === 'wire') { canvas.style.cursor = 'crosshair'; return; }
+    // Check for port hover
+    if (hitPortNode(mx, my)) { canvas.style.cursor = 'grab'; return; }
     canvas.style.cursor = hitPixel(mx, my) ? 'grab' : 'default';
   };
 
   const handleMouseUp = (e) => {
     if (isPanningRef.current) { isPanningRef.current = false; return; }
+    
+    // Port drag end
+    if (isDraggingPortRef.current && dragPortIdxRef.current !== null) {
+      const portIdx = dragPortIdxRef.current;
+      const live = livePortRef.current[portIdx];
+      if (live) {
+        onPortNodeMove?.(portIdx, live.x, live.y);
+        livePortRef.current = {};
+      }
+      isDraggingPortRef.current = false;
+      dragPortIdxRef.current = null;
+      return;
+    }
+    
     if (isDraggingRef.current && dragPixelRef.current) {
       const dp = dragPixelRef.current;
       const live = livePixelRef.current[dp.id];
