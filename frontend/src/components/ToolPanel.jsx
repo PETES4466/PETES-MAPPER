@@ -20,6 +20,12 @@ export default function ToolPanel({
   clipboardCount, selectedCount
 }) {
 
+  const loadFontFile = useCallback((file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => onFontLoad(e.target.result, file.name.replace(/\.[^.]+$/, ''));
+    reader.readAsArrayBuffer(file);
+  }, [onFontLoad]);
+
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     e.currentTarget.classList.remove('dragover');
@@ -27,13 +33,7 @@ export default function ToolPanel({
     if (file && (file.name.endsWith('.ttf') || file.name.endsWith('.otf'))) {
       loadFontFile(file);
     }
-  }, []);
-
-  const loadFontFile = (file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => onFontLoad(e.target.result, file.name.replace(/\.[^.]+$/, ''));
-    reader.readAsArrayBuffer(file);
-  };
+  }, [loadFontFile]);
 
   const handleFileInput = (e) => {
     const file = e.target.files[0];
