@@ -164,7 +164,7 @@ export default function ToolPanel({
         <input type="range" min={0} max={10} step={0.5}
           value={edgeMarginMm} onChange={e => onEdgeMarginChange(+e.target.value)}
           data-testid="edge-margin-slider" />
-        <div className="tooltip-hint">Prevents pixels from bleeding out at font edges</div>
+        <div className="tooltip-hint">3–5 mm recommended to prevent pixel bleed &amp; allow mechanical fitting</div>
       </div>
 
       {/* ── Tools ────────────────────────────── */}
