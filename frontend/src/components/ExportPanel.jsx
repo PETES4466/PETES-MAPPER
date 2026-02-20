@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Download, RotateCcw, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Download, RotateCcw, CheckCircle, AlertTriangle, Plug } from 'lucide-react';
 import { PORT_COLORS, getPortStats, PORT_PIXEL_LIMIT } from '../utils/wireUtils';
 
 const WIRE_DIRECTIONS = [
@@ -14,7 +14,8 @@ export default function ExportPanel({
   wiringMode, onWiringModeChange,
   wiringDirection, onWiringDirectionChange,
   onReWire, onApplyWire, onClearWire,
-  exportFormat, onExportFormatChange, onExport
+  exportFormat, onExportFormatChange, onExport,
+  portNodes, letterPortMap, selectedPortIndex, onSelectPort, text
 }) {
   const portStats = useMemo(() => getPortStats(pixels), [pixels]);
   const fillPixels   = pixels.filter(p => p.type === 'fill').length;
