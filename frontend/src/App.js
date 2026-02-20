@@ -332,18 +332,23 @@ export default function App() {
     const newPx = clipboard.map(p => ({ ...p, id: `px_paste_${c++}`, x: p.x + 10, y: p.y + 10, isAuto: false }));
     const all   = [...pixels, ...newPx];
     const order = autoSnakeWiring(all, wiringDirection);
-    setPixels(assignPorts(all, order));
+    const wired = assignPortsWithLetterMap(all, order, letterPortMap, disconnectedAfter);
+    setPixels(wired);
     setWiringOrder(order);
     setSelectedIds(new Set(newPx.map(p => p.id)));
-  }, [clipboard, pixels, wiringDirection]);
+    saveToHistory(wired, order, portNodes, letterPortMap, disconnectedAfter);
+  }, [clipboard, pixels, wiringDirection, letterPortMap, disconnectedAfter, portNodes, saveToHistory]);
+  
   const handleDelete = useCallback(() => {
     if (!selectedIds.size) return;
     const rem = pixels.filter(p => !selectedIds.has(p.id));
     const ord = wiringOrder.filter(id => !selectedIds.has(id));
-    setPixels(assignPorts(rem, ord));
+    const wired = assignPortsWithLetterMap(rem, ord, letterPortMap, disconnectedAfter);
+    setPixels(wired);
     setWiringOrder(ord);
     setSelectedIds(new Set());
-  }, [selectedIds, pixels, wiringOrder]);
+    saveToHistory(wired, ord, portNodes, letterPortMap, disconnectedAfter);
+  }, [selectedIds, pixels, wiringOrder, letterPortMap, disconnectedAfter, portNodes, saveToHistory]);
 
   // ── Export ────────────────────────────────────────────────────────────────
   const handleExport = useCallback(() => {
