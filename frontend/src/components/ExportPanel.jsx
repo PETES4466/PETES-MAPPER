@@ -61,23 +61,52 @@ export default function ExportPanel({
       {/* ── T8000 Port Assignment ────────────────────────────── */}
       <div className="panel-section">
         <div className="section-title">T8000 Ports (8 × 1024)</div>
-        {portStats.stats.map((s, i) => (
-          <div key={i} className="port-bar-row" data-testid={`port-bar-${i+1}`}>
-            <span className="port-label" style={{ color: PORT_COLORS[i] }}>P{i+1}</span>
-            <div className="port-bar-track">
-              <div className="port-bar-fill"
-                style={{
-                  width: `${Math.min(100, (s.count / PORT_PIXEL_LIMIT) * 100)}%`,
-                  background: s.overflow ? '#ff6b6b' : PORT_COLORS[i]
+        <div className="tooltip-hint" style={{ marginBottom: 8 }}>
+          Click a port to select it, then click a letter on canvas to connect
+        </div>
+        {portStats.stats.map((s, i) => {
+          const isSelected = selectedPortIndex === i;
+          const connectedLetters = Object.entries(letterPortMap || {})
+            .filter(([_, pIdx]) => pIdx === i)
+            .map(([lIdx]) => text?.[parseInt(lIdx)] || `#${lIdx}`)
+            .join(', ');
+          
+          return (
+            <div key={i} className="port-bar-row" data-testid={`port-bar-${i+1}`}>
+              <button 
+                className={`port-btn ${isSelected ? 'selected' : ''}`}
+                style={{ 
+                  color: PORT_COLORS[i], 
+                  borderColor: isSelected ? PORT_COLORS[i] : 'var(--border)',
+                  background: isSelected ? `${PORT_COLORS[i]}22` : 'transparent'
                 }}
-              />
+                onClick={() => onSelectPort?.(i)}
+                data-testid={`port-select-${i+1}`}
+                title={connectedLetters ? `Connected to: ${connectedLetters}` : 'Click to select port'}
+              >
+                <Plug size={10}/> P{i+1}
+              </button>
+              <div className="port-bar-track">
+                <div className="port-bar-fill"
+                  style={{
+                    width: `${Math.min(100, (s.count / PORT_PIXEL_LIMIT) * 100)}%`,
+                    background: s.overflow ? '#ff6b6b' : PORT_COLORS[i]
+                  }}
+                />
+              </div>
+              <span className="port-count"
+                style={{ color: s.overflow ? 'var(--danger)' : s.count > 0 ? PORT_COLORS[i] : 'var(--muted)' }}>
+                {s.count}/{PORT_PIXEL_LIMIT}
+              </span>
             </div>
-            <span className="port-count"
-              style={{ color: s.overflow ? 'var(--danger)' : s.count > 0 ? PORT_COLORS[i] : 'var(--muted)' }}>
-              {s.count}/{PORT_PIXEL_LIMIT}
-            </span>
+          );
+        })}
+        {selectedPortIndex !== null && (
+          <div style={{ marginTop: 6, padding: 6, background: 'rgba(0,212,255,0.08)', 
+            borderRadius: 4, fontSize: 11, color: 'var(--accent)' }}>
+            Port {selectedPortIndex + 1} selected — click a letter's start node to connect
           </div>
-        ))}
+        )}
       </div>
 
       {/* ── Wiring Mode ─────────────────────────────────────── */}
