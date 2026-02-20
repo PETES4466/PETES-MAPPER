@@ -418,7 +418,6 @@ export default function LedCanvas({
       const canvas = canvasRef.current;
       if (!canvas) return;
       const { width: W, height: H } = canvas.getBoundingClientRect();
-      const { computeLetterZoom } = require('../utils/wireUtils');
       const result = computeLetterZoom(letterIndex, pixelsRef.current, W, H, 60);
       if (result) {
         scaleRef.current = result.scale;
