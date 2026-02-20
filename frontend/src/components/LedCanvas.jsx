@@ -38,6 +38,14 @@ export default function LedCanvas({
   const rubberStartRef   = useRef({ mx: 0, my: 0 });
   const rubberCurRef     = useRef({ mx: 0, my: 0 });
   const livePixelRef     = useRef({});
+  
+  // Port dragging refs
+  const isDraggingPortRef = useRef(false);
+  const dragPortIdxRef    = useRef(null);
+  const livePortRef       = useRef({});
+  
+  // Right-click tracking for escape
+  const lastRightClickRef = useRef(0);
 
   // Props accessible in event handlers via refs
   const pixelsRef       = useRef(pixels);
@@ -52,6 +60,10 @@ export default function LedCanvas({
   const odRef           = useRef(pixelOdMm);
   const breakApartRef   = useRef(isBreakApart);
   const selLetterRef    = useRef(selectedLetterIndex);
+  const portNodesRef    = useRef(portNodes);
+  const letterPortMapRef = useRef(letterPortMap);
+  const disconnectedRef  = useRef(disconnectedAfter);
+  const selPortIdxRef    = useRef(selectedPortIndex);
 
   pixelsRef.current     = pixels;
   wiringRef.current     = wiringOrder;
@@ -65,6 +77,10 @@ export default function LedCanvas({
   odRef.current         = pixelOdMm;
   breakApartRef.current = isBreakApart;
   selLetterRef.current  = selectedLetterIndex;
+  portNodesRef.current  = portNodes;
+  letterPortMapRef.current = letterPortMap;
+  disconnectedRef.current = disconnectedAfter;
+  selPortIdxRef.current = selectedPortIndex;
 
   const toScreen = (x, y) => ({
     sx: x * scaleRef.current + offsetRef.current.x,
