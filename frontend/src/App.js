@@ -1,297 +1,292 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import './App.css';
 import ToolPanel from './components/ToolPanel';
 import LedCanvas from './components/LedCanvas';
 import ExportPanel from './components/ExportPanel';
 import { parseFont, getGlyphPathMm, getAdvanceWidth } from './utils/fontParser';
 import { generatePixelsForText, buildPixelObjects } from './utils/pixelUtils';
-import { autoSnakeWiring, assignPorts } from './utils/wireUtils';
+import { autoSnakeWiring, assignPorts, computeLetterZoom } from './utils/wireUtils';
 import { generateDXF, generateCJB, downloadFile } from './utils/exportUtils';
 
 export default function App() {
   // ── Font & Text ──────────────────────────────────────────────────────────
-  const [font, setFont]               = useState(null);
-  const [fontName, setFontName]       = useState('');
-  const [text, setText]               = useState('HELLO');
-  const [fontSizeMm, setFontSizeMm]   = useState(100);
-  const [letterSpacingMm, setLetterSpacingMm] = useState(5);
+  const [font, setFont]           = useState(null);
+  const [fontName, setFontName]   = useState('');
+  const [text, setText]           = useState('HELLO');
+  const [fontSizeCm, setFontSizeCm] = useState(100);     // in cm (=mm*10)
+  const [letterSpacingCm, setLetterSpacingCm] = useState(0.5); // in cm
 
   // ── Mode & Spacing ───────────────────────────────────────────────────────
-  const [mode, setMode]                     = useState('both');
-  const [fillSpacingMm, setFillSpacingMm]   = useState(15);
-  const [borderSpacingMm, setBorderSpacingMm] = useState(12);
+  const [mode, setMode]                         = useState('both');
+  const [fillSpacingMm, setFillSpacingMm]       = useState(15);
+  const [borderSpacingMm, setBorderSpacingMm]   = useState(12);
   const [borderPixelCount, setBorderPixelCount] = useState('auto');
-  const [pixelOdMm, setPixelOdMm]           = useState(12);
+  const [pixelOdMm, setPixelOdMm]               = useState(12);
+  const [edgeMarginMm, setEdgeMarginMm]         = useState(3);
 
   // ── Canvas Data ──────────────────────────────────────────────────────────
-  const [pixels, setPixels]           = useState([]);
-  const [guideCommands, setGuideCommands] = useState([]); // [{letter, commands}]
-  const [wiringOrder, setWiringOrder] = useState([]);     // ordered pixel IDs
+  const [pixels, setPixels]               = useState([]);
+  const [guideCommands, setGuideCommands] = useState([]);
+  const [wiringOrder, setWiringOrder]     = useState([]);
 
   // ── Wiring ───────────────────────────────────────────────────────────────
-  const [wiringMode, setWiringMode]         = useState('snake');
+  const [wiringMode, setWiringMode]           = useState('snake');
   const [wiringDirection, setWiringDirection] = useState('ltr-ttb');
-  const [pendingWire, setPendingWire]       = useState([]); // for click-wire mode
+  const [pendingWire, setPendingWire]         = useState([]);
 
   // ── Tools & UI ───────────────────────────────────────────────────────────
-  const [activeTool, setActiveTool] = useState('select');
-  const [selectedIds, setSelectedIds] = useState(new Set());
-  const [clipboard, setClipboard]   = useState([]);
-  const [showNumbers, setShowNumbers] = useState(true);
-  const [showWiring, setShowWiring]   = useState(true);
-  const [showGuide, setShowGuide]     = useState(true);
+  const [activeTool, setActiveTool]     = useState('select');
+  const [selectedIds, setSelectedIds]   = useState(new Set());
+  const [clipboard, setClipboard]       = useState([]);
+  const [showNumbers, setShowNumbers]   = useState(true);
+  const [showWiring, setShowWiring]     = useState(true);
+  const [showGuide, setShowGuide]       = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // ── Break Apart ──────────────────────────────────────────────────────────
+  const [isBreakApart, setIsBreakApart]           = useState(false);
+  const [selectedLetterIndex, setSelectedLetterIndex] = useState(null);
 
   // ── Export ───────────────────────────────────────────────────────────────
   const [exportFormat, setExportFormat] = useState('dxf');
 
-  // ── Font Load Handler ────────────────────────────────────────────────────
+  // Canvas zoom ref (to allow App to trigger zoom)
+  const canvasZoomRef = useRef(null);
+
+  // Convert cm → mm for internal use
+  const fontSizeMm     = fontSizeCm * 10;
+  const letterSpacingMm = letterSpacingCm * 10;
+
+  // ── Font Load ────────────────────────────────────────────────────────────
   const handleFontLoad = useCallback((arrayBuffer, name) => {
-    try {
-      const parsed = parseFont(arrayBuffer);
-      setFont(parsed);
-      setFontName(name);
-    } catch (e) {
-      alert('Failed to parse font: ' + e.message);
-    }
+    try { setFont(parseFont(arrayBuffer)); setFontName(name); }
+    catch (e) { alert('Font parse error: ' + e.message); }
   }, []);
 
-  // ── Generate Pixels ──────────────────────────────────────────────────────
+  // ── Generate ─────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (!font || !text.trim()) return;
     setIsGenerating(true);
     try {
-      await new Promise(r => setTimeout(r, 10)); // allow UI update
+      await new Promise(r => setTimeout(r, 10));
+      const settings = { fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm };
+      const raw  = generatePixelsForText(font, text, settings);
+      const base = buildPixelObjects(raw);
 
-      const settings = { fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm };
-      const rawPixels = generatePixelsForText(font, text, settings);
-      const basePixels = buildPixelObjects(rawPixels);
-
-      // Guide paths for canvas overlay
+      // Build guide paths
       const guides = [];
       let xOff = 0;
       for (const char of text) {
         if (char === ' ') { xOff += fontSizeMm * 0.28; continue; }
-        const cmds = getGlyphPathMm(font, char, fontSizeMm, xOff);
-        guides.push({ letter: char, commands: cmds });
+        guides.push({ letter: char, commands: getGlyphPathMm(font, char, fontSizeMm, xOff) });
         xOff += getAdvanceWidth(font, char, fontSizeMm) + letterSpacingMm;
       }
       setGuideCommands(guides);
 
-      // Auto-wire
-      const order = autoSnakeWiring(basePixels, wiringDirection);
-      const wiredPixels = assignPorts(basePixels, order);
-      setPixels(wiredPixels);
+      const order  = autoSnakeWiring(base, wiringDirection);
+      const wired  = assignPorts(base, order);
+      setPixels(wired);
       setWiringOrder(order);
       setSelectedIds(new Set());
       setPendingWire([]);
+      setSelectedLetterIndex(null);
     } catch (e) {
-      console.error('Generate error:', e);
-      alert('Error generating pixels: ' + e.message);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [font, text, fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, wiringDirection]);
+      console.error(e);
+      alert('Generate error: ' + e.message);
+    } finally { setIsGenerating(false); }
+  }, [font, text, fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm, wiringDirection]);
 
-  // ── Re-wire (apply wiring settings to existing pixels) ───────────────────
+  // ── Re-Wire ──────────────────────────────────────────────────────────────
   const handleReWire = useCallback(() => {
     if (!pixels.length) return;
-    const autoPixels = pixels.filter(p => p.isAuto);
-    const manualOrder = wiringOrder.filter(id => {
-      const p = pixels.find(px => px.id === id);
-      return p && !p.isAuto;
-    });
-    // For now, re-snake all auto pixels
-    const newOrder = autoSnakeWiring(pixels, wiringDirection);
-    const rewired = assignPorts(pixels, newOrder);
-    setPixels(rewired);
-    setWiringOrder(newOrder);
-  }, [pixels, wiringOrder, wiringDirection]);
+    const order = autoSnakeWiring(pixels, wiringDirection);
+    setPixels(assignPorts(pixels, order));
+    setWiringOrder(order);
+  }, [pixels, wiringDirection]);
 
-  // ── Apply pending click-wire ─────────────────────────────────────────────
+  // ── Apply pending click-wire ──────────────────────────────────────────────
   const handleApplyWire = useCallback(() => {
     if (pendingWire.length < 2) return;
-    // Mark pending pixels as manual, fill remaining auto pixels by snake
     const manualSet = new Set(pendingWire);
-    const autoPixels = pixels.filter(p => !manualSet.has(p.id));
-    const autoOrder  = autoSnakeWiring(autoPixels, wiringDirection);
-    const fullOrder  = [...pendingWire, ...autoOrder];
-    const updated = pixels.map(p => ({
-      ...p, isAuto: !manualSet.has(p.id)
-    }));
-    const wired = assignPorts(updated, fullOrder);
-    setPixels(wired);
+    const rest      = pixels.filter(p => !manualSet.has(p.id));
+    const autoOrder = autoSnakeWiring(rest, wiringDirection);
+    const fullOrder = [...pendingWire, ...autoOrder];
+    const updated   = pixels.map(p => ({ ...p, isAuto: !manualSet.has(p.id) }));
+    setPixels(assignPorts(updated, fullOrder));
     setWiringOrder(fullOrder);
     setPendingWire([]);
   }, [pendingWire, pixels, wiringDirection]);
 
-  // ── Pixel move callback (from canvas drag) ───────────────────────────────
+  // ── Pixel move ────────────────────────────────────────────────────────────
   const handlePixelMove = useCallback((id, newX, newY) => {
-    setPixels(prev => prev.map(p => p.id === id ? { ...p, x: newX, y: newY, isAuto: false } : p));
-  }, []);
+    setPixels(prev => {
+      const next = prev.map(p => p.id === id ? { ...p, x: newX, y: newY, isAuto: false } : p);
+      return assignPorts(next, wiringOrder);
+    });
+  }, [wiringOrder]);
 
-  // ── Pixel selection ──────────────────────────────────────────────────────
+  // ── Pixel select ──────────────────────────────────────────────────────────
   const handlePixelSelect = useCallback((ids, multi = false) => {
     setSelectedIds(prev => {
       const next = multi ? new Set(prev) : new Set();
-      for (const id of ids) {
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-      }
+      for (const id of ids) { if (next.has(id)) next.delete(id); else next.add(id); }
       return next;
     });
   }, []);
 
-  // ── Wire-click: add pixel to pending chain ───────────────────────────────
-  const handleWireClick = useCallback((pixelId) => {
-    setPendingWire(prev => {
-      if (prev.includes(pixelId)) return prev;
-      return [...prev, pixelId];
-    });
+  // ── Break-apart letter select ─────────────────────────────────────────────
+  const handleLetterSelect = useCallback((letterIndex) => {
+    setSelectedLetterIndex(prev => prev === letterIndex ? null : letterIndex);
+    // Trigger canvas zoom to this letter
+    if (canvasZoomRef.current) {
+      canvasZoomRef.current(letterIndex);
+    }
   }, []);
 
-  // ── Cut/Copy/Paste/Delete ────────────────────────────────────────────────
-  const handleCopy = useCallback(() => {
-    const sel = pixels.filter(p => selectedIds.has(p.id));
-    setClipboard(sel);
-  }, [pixels, selectedIds]);
+  // ── Wire click ────────────────────────────────────────────────────────────
+  const handleWireClick = useCallback((pixelId) => {
+    setPendingWire(prev => prev.includes(pixelId) ? prev : [...prev, pixelId]);
+  }, []);
 
-  const handlePaste = useCallback(() => {
-    if (!clipboard.length) return;
-    const offset = 10;
+  // ── Break wiring ──────────────────────────────────────────────────────────
+  const handleBreakWiring = useCallback(() => {
+    if (!selectedIds.size) return;
+    setPixels(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, wiringBroken: true } : p));
+  }, [selectedIds]);
+
+  // ── Restore wiring ────────────────────────────────────────────────────────
+  const handleRestoreWiring = useCallback(() => {
+    if (!selectedIds.size) return;
+    setPixels(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p));
+  }, [selectedIds]);
+
+  // ── Add pixel at position ─────────────────────────────────────────────────
+  const handleAddPixel = useCallback((xMm, yMm) => {
     let counter = Date.now();
-    const newPx = clipboard.map(p => ({
-      ...p, id: `px_paste_${counter++}`, x: p.x + offset, y: p.y + offset, isAuto: false
-    }));
-    const allPixels = [...pixels, ...newPx];
-    const order = autoSnakeWiring(allPixels, wiringDirection);
-    const wired = assignPorts(allPixels, order);
-    setPixels(wired);
+    const newPx = {
+      id: `px_add_${counter++}`,
+      x: xMm, y: yMm,
+      type: 'fill',
+      letter: '?', letterIndex: 0,
+      portIndex: -1, portPixelIndex: -1,
+      wiringOrder: -1,
+      isFirst: false, isLast: false,
+      isAuto: false, wiringBroken: false, selected: false
+    };
+    const allPx = [...pixels, newPx];
+    const order = [...wiringOrder, newPx.id];
+    setPixels(assignPorts(allPx, order));
+    setWiringOrder(order);
+    setSelectedIds(new Set([newPx.id]));
+  }, [pixels, wiringOrder]);
+
+  // ── Copy / Paste / Delete ─────────────────────────────────────────────────
+  const handleCopy   = useCallback(() => setClipboard(pixels.filter(p => selectedIds.has(p.id))), [pixels, selectedIds]);
+  const handlePaste  = useCallback(() => {
+    if (!clipboard.length) return;
+    let c = Date.now();
+    const newPx = clipboard.map(p => ({ ...p, id: `px_paste_${c++}`, x: p.x + 10, y: p.y + 10, isAuto: false }));
+    const all   = [...pixels, ...newPx];
+    const order = autoSnakeWiring(all, wiringDirection);
+    setPixels(assignPorts(all, order));
     setWiringOrder(order);
     setSelectedIds(new Set(newPx.map(p => p.id)));
   }, [clipboard, pixels, wiringDirection]);
-
   const handleDelete = useCallback(() => {
     if (!selectedIds.size) return;
-    const remaining = pixels.filter(p => !selectedIds.has(p.id));
-    const newOrder = wiringOrder.filter(id => !selectedIds.has(id));
-    const rewired = assignPorts(remaining, newOrder);
-    setPixels(rewired);
-    setWiringOrder(newOrder);
+    const rem = pixels.filter(p => !selectedIds.has(p.id));
+    const ord = wiringOrder.filter(id => !selectedIds.has(id));
+    setPixels(assignPorts(rem, ord));
+    setWiringOrder(ord);
     setSelectedIds(new Set());
   }, [selectedIds, pixels, wiringOrder]);
 
-  // ── Export ───────────────────────────────────────────────────────────────
+  // ── Export ────────────────────────────────────────────────────────────────
   const handleExport = useCallback(() => {
     if (!pixels.length) return;
-    const settings = { pixelOdMm, text, fontSizeMm };
+    const s = { pixelOdMm, text, fontSizeMm };
     if (exportFormat === 'dxf') {
-      const dxf = generateDXF(pixels, wiringOrder, settings);
-      downloadFile(dxf, `led_design_${text.replace(/\s+/g, '_')}.dxf`, 'application/dxf');
+      downloadFile(generateDXF(pixels, wiringOrder, s), `led_${text.replace(/\s+/g,'_')}.dxf`, 'application/dxf');
     } else {
-      const cjb = generateCJB(pixels, wiringOrder, settings);
-      downloadFile(cjb, `led_design_${text.replace(/\s+/g, '_')}.cjb`, 'application/xml');
+      downloadFile(generateCJB(pixels, wiringOrder, s), `led_${text.replace(/\s+/g,'_')}.cjb`, 'application/xml');
     }
   }, [pixels, wiringOrder, exportFormat, pixelOdMm, text, fontSizeMm]);
 
   return (
     <div className="app-layout">
       <ToolPanel
-        font={font}
-        fontName={fontName}
-        onFontLoad={handleFontLoad}
-        text={text}
-        onTextChange={setText}
-        fontSizeMm={fontSizeMm}
-        onFontSizeChange={setFontSizeMm}
-        letterSpacingMm={letterSpacingMm}
-        onLetterSpacingChange={setLetterSpacingMm}
-        mode={mode}
-        onModeChange={setMode}
-        fillSpacingMm={fillSpacingMm}
-        onFillSpacingChange={setFillSpacingMm}
-        borderSpacingMm={borderSpacingMm}
-        onBorderSpacingChange={setBorderSpacingMm}
-        borderPixelCount={borderPixelCount}
-        onBorderPixelCountChange={setBorderPixelCount}
-        pixelOdMm={pixelOdMm}
-        onPixelOdChange={setPixelOdMm}
-        activeTool={activeTool}
-        onToolChange={setActiveTool}
-        showNumbers={showNumbers}
-        onShowNumbersChange={setShowNumbers}
-        showWiring={showWiring}
-        onShowWiringChange={setShowWiring}
-        showGuide={showGuide}
-        onShowGuideChange={setShowGuide}
-        isGenerating={isGenerating}
-        onGenerate={handleGenerate}
-        onDelete={handleDelete}
-        onCopy={handleCopy}
-        onPaste={handlePaste}
-        clipboardCount={clipboard.length}
-        selectedCount={selectedIds.size}
+        font={font} fontName={fontName} onFontLoad={handleFontLoad}
+        text={text} onTextChange={setText}
+        fontSizeCm={fontSizeCm} onFontSizeCmChange={setFontSizeCm}
+        letterSpacingCm={letterSpacingCm} onLetterSpacingCmChange={setLetterSpacingCm}
+        mode={mode} onModeChange={setMode}
+        fillSpacingMm={fillSpacingMm} onFillSpacingChange={setFillSpacingMm}
+        borderSpacingMm={borderSpacingMm} onBorderSpacingChange={setBorderSpacingMm}
+        borderPixelCount={borderPixelCount} onBorderPixelCountChange={setBorderPixelCount}
+        pixelOdMm={pixelOdMm} onPixelOdChange={setPixelOdMm}
+        edgeMarginMm={edgeMarginMm} onEdgeMarginChange={setEdgeMarginMm}
+        activeTool={activeTool} onToolChange={setActiveTool}
+        showNumbers={showNumbers} onShowNumbersChange={setShowNumbers}
+        showWiring={showWiring} onShowWiringChange={setShowWiring}
+        showGuide={showGuide} onShowGuideChange={setShowGuide}
+        isGenerating={isGenerating} onGenerate={handleGenerate}
+        onDelete={handleDelete} onCopy={handleCopy} onPaste={handlePaste}
+        onBreakWiring={handleBreakWiring} onRestoreWiring={handleRestoreWiring}
+        isBreakApart={isBreakApart} onBreakApartToggle={() => setIsBreakApart(v => !v)}
+        clipboardCount={clipboard.length} selectedCount={selectedIds.size}
+        pixelCount={pixels.length}
       />
 
       <div className="canvas-area">
-        {/* Toolbar */}
         <div className="canvas-toolbar">
           <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-            Scroll = Zoom &nbsp;|&nbsp; Middle-drag or Pan tool = Move
+            Scroll=Zoom &nbsp;·&nbsp; Middle-drag/Pan=Move &nbsp;·&nbsp; Right-click=Add pixel
           </span>
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)' }}>
+          <span style={{ marginLeft: 'auto', fontSize: 11 }}>
             {pixels.length > 0 && (
-              <span>
-                <span style={{ color: 'var(--accent2)' }}>{pixels.length}</span> pixels &nbsp;|&nbsp;
-                Wiring: <span style={{ color: 'var(--accent)' }}>{wiringMode}</span>
+              <span style={{ color: 'var(--muted)' }}>
+                <span style={{ color: 'var(--accent2)' }}>{pixels.length}</span> px &nbsp;·&nbsp;
+                Font: <span style={{ color: 'var(--accent)' }}>{fontSizeCm}cm</span> &nbsp;·&nbsp;
+                Margin: <span style={{ color: 'var(--accent)' }}>{edgeMarginMm}mm</span>
               </span>
             )}
           </span>
         </div>
 
         <LedCanvas
-          pixels={pixels}
-          wiringOrder={wiringOrder}
-          guideCommands={guideCommands}
-          selectedIds={selectedIds}
-          activeTool={activeTool}
+          pixels={pixels} wiringOrder={wiringOrder} guideCommands={guideCommands}
+          selectedIds={selectedIds} activeTool={activeTool}
           pixelOdMm={pixelOdMm}
-          showNumbers={showNumbers}
-          showWiring={showWiring}
-          showGuide={showGuide}
-          wiringMode={wiringMode}
-          pendingWire={pendingWire}
-          onPixelMove={handlePixelMove}
-          onPixelSelect={handlePixelSelect}
-          onWireClick={handleWireClick}
+          showNumbers={showNumbers} showWiring={showWiring} showGuide={showGuide}
+          wiringMode={wiringMode} pendingWire={pendingWire}
+          isBreakApart={isBreakApart} selectedLetterIndex={selectedLetterIndex}
+          onPixelMove={handlePixelMove} onPixelSelect={handlePixelSelect}
+          onWireClick={handleWireClick} onLetterSelect={handleLetterSelect}
+          onAddPixel={handleAddPixel}
+          zoomRef={canvasZoomRef}
         />
 
-        {/* Status bar */}
         <div className="canvas-statusbar">
           <span>Selected: <span className="status-val">{selectedIds.size}</span></span>
           <span>Border: <span className="status-val">{pixels.filter(p=>p.type==='border').length}</span></span>
           <span>Fill: <span className="status-val">{pixels.filter(p=>p.type==='fill').length}</span></span>
-          {pendingWire.length > 0 && (
-            <span style={{ color: 'var(--accent)' }}>
-              Wiring chain: <span className="status-val">{pendingWire.length}</span> px
-            </span>
+          <span>Broken: <span className="status-val" style={{ color: pixels.some(p=>p.wiringBroken)?'var(--danger)':'inherit' }}>
+            {pixels.filter(p=>p.wiringBroken).length}
+          </span></span>
+          {pendingWire.length > 0 && <span style={{ color: 'var(--accent)' }}>Wire chain: <span className="status-val">{pendingWire.length}</span></span>}
+          {isBreakApart && selectedLetterIndex !== null && (
+            <span style={{ color: 'var(--accent2)' }}>Letter selected: index {selectedLetterIndex}</span>
           )}
         </div>
       </div>
 
       <ExportPanel
-        pixels={pixels}
-        wiringOrder={wiringOrder}
-        pendingWire={pendingWire}
-        wiringMode={wiringMode}
-        onWiringModeChange={setWiringMode}
-        wiringDirection={wiringDirection}
-        onWiringDirectionChange={setWiringDirection}
-        onReWire={handleReWire}
-        onApplyWire={handleApplyWire}
+        pixels={pixels} wiringOrder={wiringOrder} pendingWire={pendingWire}
+        wiringMode={wiringMode} onWiringModeChange={setWiringMode}
+        wiringDirection={wiringDirection} onWiringDirectionChange={setWiringDirection}
+        onReWire={handleReWire} onApplyWire={handleApplyWire}
         onClearWire={() => setPendingWire([])}
-        exportFormat={exportFormat}
-        onExportFormatChange={setExportFormat}
+        exportFormat={exportFormat} onExportFormatChange={setExportFormat}
         onExport={handleExport}
       />
     </div>
