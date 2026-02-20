@@ -365,6 +365,112 @@ export default function LedCanvas({
       ctx.restore();
     }
 
+    // ── Port nodes and connections ─────────────────────────────────────────
+    const ports = portNodesRef.current || [];
+    const lpMap = letterPortMapRef.current || {};
+    const disconnected = disconnectedRef.current || new Set();
+    const selPortIdx = selPortIdxRef.current;
+    
+    if (pixels.length > 0 && ports.length > 0) {
+      // Draw port-to-letter connection lines
+      ctx.save();
+      for (const [letterIdxStr, portIdx] of Object.entries(lpMap)) {
+        const letterIdx = parseInt(letterIdxStr);
+        const startPixel = getLetterStartPixel(pixels, letterIdx);
+        if (!startPixel) continue;
+        
+        const port = ports.find(p => p.portIndex === portIdx);
+        if (!port) continue;
+        
+        const portX = livePortRef.current[port.portIndex]?.x ?? port.x;
+        const portY = livePortRef.current[port.portIndex]?.y ?? port.y;
+        const { sx: psx, sy: psy } = toScreen(portX, portY);
+        const { sx: lsx, sy: lsy } = toScreen(startPixel.x, startPixel.y);
+        
+        // Draw connection line
+        ctx.strokeStyle = PORT_COLORS[portIdx] + 'aa';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 3]);
+        ctx.beginPath();
+        ctx.moveTo(psx, psy);
+        ctx.lineTo(lsx, lsy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
+      
+      // Draw disconnection markers between letters
+      if (disconnected.size > 0) {
+        ctx.save();
+        for (const letterIdx of disconnected) {
+          const endPixel = pixels.find(p => p.letterIndex === letterIdx && p.isLast);
+          const nextLetterIdx = letterIdx + 1;
+          const nextStartPixel = pixels.find(p => p.letterIndex === nextLetterIdx && p.isFirst);
+          
+          if (endPixel && nextStartPixel) {
+            const { sx: ex, sy: ey } = toScreen(endPixel.x, endPixel.y);
+            const { sx: nx, sy: ny } = toScreen(nextStartPixel.x, nextStartPixel.y);
+            
+            // Draw disconnection X mark in the middle
+            const mx = (ex + nx) / 2;
+            const my = (ey + ny) / 2;
+            
+            ctx.strokeStyle = DISCONNECTED_COLOR;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(mx - 8, my - 8);
+            ctx.lineTo(mx + 8, my + 8);
+            ctx.moveTo(mx + 8, my - 8);
+            ctx.lineTo(mx - 8, my + 8);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+      
+      // Draw port nodes
+      ctx.save();
+      for (const port of ports) {
+        const portX = livePortRef.current[port.portIndex]?.x ?? port.x;
+        const portY = livePortRef.current[port.portIndex]?.y ?? port.y;
+        const { sx, sy } = toScreen(portX, portY);
+        const portColor = PORT_COLORS[port.portIndex];
+        const isSelected = selPortIdx === port.portIndex;
+        const hasConnection = Object.values(lpMap).includes(port.portIndex);
+        
+        // Port node background
+        ctx.beginPath();
+        ctx.arc(sx, sy, PORT_NODE_SIZE / 2, 0, Math.PI * 2);
+        ctx.fillStyle = isSelected ? portColor : hasConnection ? portColor + 'cc' : portColor + '66';
+        ctx.fill();
+        
+        // Port node border
+        ctx.strokeStyle = isSelected ? '#ffffff' : portColor;
+        ctx.lineWidth = isSelected ? 3 : 2;
+        ctx.stroke();
+        
+        // Port label
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(port.label, sx, sy);
+        
+        // Glow for selected port
+        if (isSelected) {
+          ctx.shadowColor = portColor;
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.arc(sx, sy, PORT_NODE_SIZE / 2 + 4, 0, Math.PI * 2);
+          ctx.strokeStyle = portColor;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+      }
+      ctx.restore();
+    }
+
     // Placeholder
     if (!pixels.length && !guides.length) {
       ctx.save();
