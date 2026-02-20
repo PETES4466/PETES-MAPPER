@@ -5,8 +5,11 @@ import LedCanvas from './components/LedCanvas';
 import ExportPanel from './components/ExportPanel';
 import { parseFont, getGlyphPathMm, getAdvanceWidth } from './utils/fontParser';
 import { generatePixelsForText, buildPixelObjects } from './utils/pixelUtils';
-import { autoSnakeWiring, assignPorts, computeLetterZoom } from './utils/wireUtils';
+import { autoSnakeWiring, assignPorts, assignPortsWithLetterMap, computeLetterZoom, buildInitialPortNodes } from './utils/wireUtils';
 import { generateDXF, generateCJB, downloadFile } from './utils/exportUtils';
+
+// Maximum undo history steps
+const MAX_HISTORY = 10;
 
 export default function App() {
   // ── Font & Text ──────────────────────────────────────────────────────────
@@ -50,12 +53,66 @@ export default function App() {
   // ── Export ───────────────────────────────────────────────────────────────
   const [exportFormat, setExportFormat] = useState('dxf');
 
+  // ── Port Nodes (T8000 controller ports) ──────────────────────────────────
+  const [portNodes, setPortNodes] = useState(buildInitialPortNodes());
+  const [letterPortMap, setLetterPortMap] = useState({}); // { letterIndex: portIndex }
+  const [disconnectedAfter, setDisconnectedAfter] = useState(new Set()); // Set<letterIndex>
+  const [selectedPortIndex, setSelectedPortIndex] = useState(null); // Currently selected port for connection
+  const [activePortTool, setActivePortTool] = useState(false); // Port placement/connection mode
+
+  // ── Undo History ─────────────────────────────────────────────────────────
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // ── Right-click Escape State ─────────────────────────────────────────────
+  const [lastAction, setLastAction] = useState(null); // Track last action for escape
+
   // Canvas zoom ref (to allow App to trigger zoom)
   const canvasZoomRef = useRef(null);
 
   // Convert cm → mm for internal use
   const fontSizeMm     = fontSizeCm * 10;
   const letterSpacingMm = letterSpacingCm * 10;
+
+  // ── Save state to history ────────────────────────────────────────────────
+  const saveToHistory = useCallback((newPixels, newWiringOrder, newPortNodes, newLetterPortMap, newDisconnectedAfter) => {
+    const snapshot = {
+      pixels: JSON.parse(JSON.stringify(newPixels)),
+      wiringOrder: [...newWiringOrder],
+      portNodes: JSON.parse(JSON.stringify(newPortNodes)),
+      letterPortMap: { ...newLetterPortMap },
+      disconnectedAfter: new Set(newDisconnectedAfter),
+      selectedIds: new Set()
+    };
+    
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push(snapshot);
+      if (newHistory.length > MAX_HISTORY) {
+        newHistory.shift();
+        return newHistory;
+      }
+      return newHistory;
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, MAX_HISTORY - 1));
+  }, [historyIndex]);
+
+  // ── Undo function ────────────────────────────────────────────────────────
+  const handleUndo = useCallback(() => {
+    if (historyIndex <= 0 || history.length === 0) return;
+    
+    const newIndex = historyIndex - 1;
+    const snapshot = history[newIndex];
+    if (!snapshot) return;
+    
+    setPixels(snapshot.pixels);
+    setWiringOrder(snapshot.wiringOrder);
+    setPortNodes(snapshot.portNodes);
+    setLetterPortMap(snapshot.letterPortMap);
+    setDisconnectedAfter(snapshot.disconnectedAfter);
+    setSelectedIds(snapshot.selectedIds);
+    setHistoryIndex(newIndex);
+  }, [history, historyIndex]);
 
   // ── Font Load ────────────────────────────────────────────────────────────
   const handleFontLoad = useCallback((arrayBuffer, name) => {
