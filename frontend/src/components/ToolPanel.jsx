@@ -238,9 +238,28 @@ export default function ToolPanel({
           {isBreakApart ? 'Exit Break-Apart' : 'Break Apart Letters'}
         </button>
         {isBreakApart && (
-          <div className="tooltip-hint">
-            Click a letter's pixels to select & zoom it independently
-          </div>
+          <>
+            <div className="tooltip-hint" style={{ marginBottom: 6 }}>
+              Click a letter's pixels to select & zoom it independently
+            </div>
+            {/* Disconnect wiring button - only visible in break apart mode */}
+            <button
+              className={`btn btn-full ${disconnectedAfter?.has(selectedLetterIndex) ? 'btn-danger' : 'btn-secondary'}`}
+              onClick={onDisconnectLetterWiring}
+              disabled={selectedLetterIndex === null}
+              data-testid="btn-disconnect-letter"
+              style={{ fontSize: 11, padding: '5px 8px' }}>
+              <Unplug size={12}/>
+              {disconnectedAfter?.has(selectedLetterIndex) ? 'Reconnect After Letter' : 'Disconnect After Letter'}
+            </button>
+            {selectedLetterIndex !== null && (
+              <div className="tooltip-hint" style={{ marginTop: 4, color: 'var(--warning)' }}>
+                {disconnectedAfter?.has(selectedLetterIndex) 
+                  ? 'Wiring disconnected after this letter (visual gap)'
+                  : 'Click to disconnect wiring after this letter'}
+              </div>
+            )}
+          </>
         )}
       </div>
 
