@@ -16,8 +16,8 @@ frontend/src/
   App.js                    - Main state, handlers, 3-panel layout
   App.css                   - Dark LED theme
   components/
-    ToolPanel.jsx           - Left sidebar: font, text, mode, tools
-    LedCanvas.jsx           - Main interactive canvas
+    ToolPanel.jsx           - Left sidebar: font, text, mode, tools, undo
+    LedCanvas.jsx           - Main interactive canvas with port nodes
     ExportPanel.jsx         - Right sidebar: ports, wiring, export
   utils/
     fontParser.js           - opentype.js wrapper, bezier flatten, contour sampling
@@ -63,9 +63,7 @@ frontend/src/
 - **Font size in CM**: dropdown 30–300cm (30 options) → stores as mm internally
 - **Letter spacing in CM**: slider with cm display
 - **Edge margin**: 0–10mm slider (default 3mm), prevents pixel bleeding and mechanical obstruction
-  - Fill pixels: 16-point ring check at margin radius from font edge
-  - Border pixels: contour points offset inward by margin using normal vectors + fill mask
-- **Thick blue guide border**: constant 3px screen width, #1E7FFF with glow shadow, always visible at any zoom
+- **Thick blue guide border**: constant 3px screen width, #1E7FFF with glow shadow
 - **Prominent S/E markers**: outer pulsing ring, center letter label, text label above
 - **Smart wiring**: nearest-neighbor row transitions minimize hollow-area jumps
 - **Break Apart mode**: toggle per-letter highlight (unique colors), click letter → zoom to it
@@ -74,7 +72,15 @@ frontend/src/
 - **Restore Wiring**: re-connects broken pixels
 - **Right-click**: Add new pixel at clicked position
 - **Adaptive canvas scale**: font canvas capped at 1200px to support 3000mm+ fonts
-- Status bar with Broken count
+
+### v3 - Advanced Wiring & Controls (2026-02-20)
+- **10-Step Undo**: Undo button in Tools section, reverts pixel/wiring changes
+- **8 Selectable Port Buttons (P1-P8)**: Click to select, then click letter start to connect
+- **Draggable Port Nodes**: Port markers on canvas can be dragged for positioning
+- **Port-to-Letter Connection Lines**: Dashed lines show port connections visually
+- **Start/End Nodes per Letter**: Clear S (green) and E (red) markers on each letter
+- **Disconnect After Letter**: In Break Apart mode, disconnect wiring between letters (X marker)
+- **Right-click Escape**: First right-click adds pixel, second right-click within 500ms cancels
 
 ## Prioritized Backlog
 
@@ -86,7 +92,6 @@ frontend/src/
 ### P1 - High value
 - [ ] Arrow wiring direction tool (drag arrow to set wiring flow direction)
 - [ ] Per-letter independent export (nested export mode)
-- [ ] Undo/Redo (Ctrl+Z/Y) history
 - [ ] Corner pixel detection and auto-fill for tight corners
 - [ ] Wire join tool: click pixel A then B to bridge them
 
@@ -100,7 +105,6 @@ frontend/src/
 
 ## Next Tasks List
 1. Test with actual LedEdit software to validate DXF/CJB import
-2. Implement undo/redo (useReducer with history stack)
-3. Arrow wiring direction tool
-4. Per-letter independent editing/export (nesting mode)
-5. Performance test with full JOHN (6190 pixels) - optimize if needed
+2. Arrow wiring direction tool
+3. Per-letter independent editing/export (nesting mode)
+4. Performance test with full JOHN (6190 pixels) - optimize if needed
