@@ -188,6 +188,12 @@ export default function ToolPanel({
           ))}
         </div>
 
+        {/* Undo button */}
+        <button className="btn btn-secondary btn-full" style={{ fontSize: 11, padding: '6px 8px', marginBottom: 6 }}
+          onClick={onUndo} disabled={!canUndo} title="Undo last action (10 steps max)" data-testid="btn-undo">
+          <Undo2 size={12}/> Undo
+        </button>
+
         {/* Edit actions */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 3, marginBottom: 4 }}>
           <button className="btn btn-secondary" style={{ fontSize: 11, padding: '5px 4px' }}
