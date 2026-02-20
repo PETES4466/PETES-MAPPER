@@ -100,7 +100,7 @@ html, body, #root {
   flex-shrink: 0;
   white-space: nowrap;
 }
-.canvas-statusbar span { display: inline-flex; align-items: center; gap: 4px; }
+.canvas-statusbar > span { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; }
 .status-val { color: var(--text); font-weight: 500; }
 
 /* ─── Form Controls ─────────────────────────────────────────────────────── */
