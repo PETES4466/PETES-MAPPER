@@ -547,7 +547,8 @@ export default function LedCanvas({
   useEffect(() => { render(); }, [
     pixels, wiringOrder, guideCommands, selectedIds,
     showNumbers, showWiring, showGuide, pendingWire, pixelOdMm,
-    isBreakApart, selectedLetterIndex, render
+    isBreakApart, selectedLetterIndex, render,
+    portNodes, letterPortMap, disconnectedAfter, selectedPortIndex
   ]);
 
   // ── Zoom-to-letter callback ──────────────────────────────────────────────
