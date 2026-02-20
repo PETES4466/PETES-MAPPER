@@ -233,22 +233,51 @@ export default function App() {
         selectedCount={selectedIds.size}
       />
 
-      <LedCanvas
-        pixels={pixels}
-        wiringOrder={wiringOrder}
-        guideCommands={guideCommands}
-        selectedIds={selectedIds}
-        activeTool={activeTool}
-        pixelOdMm={pixelOdMm}
-        showNumbers={showNumbers}
-        showWiring={showWiring}
-        showGuide={showGuide}
-        wiringMode={wiringMode}
-        pendingWire={pendingWire}
-        onPixelMove={handlePixelMove}
-        onPixelSelect={handlePixelSelect}
-        onWireClick={handleWireClick}
-      />
+      <div className="canvas-area">
+        {/* Toolbar */}
+        <div className="canvas-toolbar">
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+            Scroll = Zoom &nbsp;|&nbsp; Middle-drag or Pan tool = Move
+          </span>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)' }}>
+            {pixels.length > 0 && (
+              <span>
+                <span style={{ color: 'var(--accent2)' }}>{pixels.length}</span> pixels &nbsp;|&nbsp;
+                Wiring: <span style={{ color: 'var(--accent)' }}>{wiringMode}</span>
+              </span>
+            )}
+          </span>
+        </div>
+
+        <LedCanvas
+          pixels={pixels}
+          wiringOrder={wiringOrder}
+          guideCommands={guideCommands}
+          selectedIds={selectedIds}
+          activeTool={activeTool}
+          pixelOdMm={pixelOdMm}
+          showNumbers={showNumbers}
+          showWiring={showWiring}
+          showGuide={showGuide}
+          wiringMode={wiringMode}
+          pendingWire={pendingWire}
+          onPixelMove={handlePixelMove}
+          onPixelSelect={handlePixelSelect}
+          onWireClick={handleWireClick}
+        />
+
+        {/* Status bar */}
+        <div className="canvas-statusbar">
+          <span>Selected: <span className="status-val">{selectedIds.size}</span></span>
+          <span>Border: <span className="status-val">{pixels.filter(p=>p.type==='border').length}</span></span>
+          <span>Fill: <span className="status-val">{pixels.filter(p=>p.type==='fill').length}</span></span>
+          {pendingWire.length > 0 && (
+            <span style={{ color: 'var(--accent)' }}>
+              Wiring chain: <span className="status-val">{pendingWire.length}</span> px
+            </span>
+          )}
+        </div>
+      </div>
 
       <ExportPanel
         pixels={pixels}
