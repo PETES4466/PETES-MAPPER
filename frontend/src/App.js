@@ -150,60 +150,58 @@ export default function App() {
       }
       setGuideCommands(guides);
 
-      const order  = autoSnakeWiring(base, wiringDirection);
-      const wired  = assignPortsWithLetterMap(base, order, letterPortMap, disconnectedAfter);
-      setPixels(wired);
+      // Generate wiring per letter (border and fill separate, no auto-connection between letters)
+      const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(base, wiringDirection, edgeMarginMm);
+      setPixels(wiredPixels);
       setWiringOrder(order);
       setSelectedIds(new Set());
       setPendingWire([]);
       setSelectedLetterIndex(null);
       setLastAction(null);
+      setApprovedLetters(new Set()); // Reset approvals
+      setManualWires([]); // Reset manual wires
+      setVisiblePorts(new Set()); // Hide all ports
       
       // Reset port nodes positions based on pixel bounds
       const resetPorts = buildInitialPortNodes();
       setPortNodes(resetPorts);
       
       // Save to history
-      saveToHistory(wired, order, resetPorts, letterPortMap, disconnectedAfter);
+      saveToHistory(wiredPixels, order, resetPorts, letterPortMap, new Set(), []);
     } catch (e) {
       console.error(e);
       alert('Generate error: ' + e.message);
     } finally { setIsGenerating(false); }
-  }, [font, text, fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm, wiringDirection, letterPortMap, disconnectedAfter, saveToHistory]);
+  }, [font, text, fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm, wiringDirection, letterPortMap, saveToHistory]);
 
   // ── Re-Wire ──────────────────────────────────────────────────────────────
   const handleReWire = useCallback(() => {
     if (!pixels.length) return;
-    const order = autoSnakeWiring(pixels, wiringDirection);
-    const wired = assignPortsWithLetterMap(pixels, order, letterPortMap, disconnectedAfter);
-    setPixels(wired);
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(pixels, wiringDirection, edgeMarginMm);
+    setPixels(wiredPixels);
     setWiringOrder(order);
-    saveToHistory(wired, order, portNodes, letterPortMap, disconnectedAfter);
-  }, [pixels, wiringDirection, letterPortMap, disconnectedAfter, portNodes, saveToHistory]);
+    saveToHistory(wiredPixels, order, portNodes, letterPortMap, approvedLetters, manualWires);
+  }, [pixels, wiringDirection, edgeMarginMm, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
 
   // ── Apply pending click-wire ──────────────────────────────────────────────
   const handleApplyWire = useCallback(() => {
     if (pendingWire.length < 2) return;
     const manualSet = new Set(pendingWire);
     const rest      = pixels.filter(p => !manualSet.has(p.id));
-    const autoOrder = autoSnakeWiring(rest, wiringDirection);
-    const fullOrder = [...pendingWire, ...autoOrder];
+    const { wiredPixels: autoWired } = autoSnakeWiringPerLetter(rest, wiringDirection, edgeMarginMm);
+    const fullOrder = [...pendingWire, ...autoWired.map(p => p.id)];
     const updated   = pixels.map(p => ({ ...p, isAuto: !manualSet.has(p.id) }));
-    const wired = assignPortsWithLetterMap(updated, fullOrder, letterPortMap, disconnectedAfter);
-    setPixels(wired);
+    setPixels(updated);
     setWiringOrder(fullOrder);
     setPendingWire([]);
-    saveToHistory(wired, fullOrder, portNodes, letterPortMap, disconnectedAfter);
-  }, [pendingWire, pixels, wiringDirection, letterPortMap, disconnectedAfter, portNodes, saveToHistory]);
+    saveToHistory(updated, fullOrder, portNodes, letterPortMap, approvedLetters, manualWires);
+  }, [pendingWire, pixels, wiringDirection, edgeMarginMm, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
 
   // ── Pixel move ────────────────────────────────────────────────────────────
   const handlePixelMove = useCallback((id, newX, newY) => {
-    setPixels(prev => {
-      const next = prev.map(p => p.id === id ? { ...p, x: newX, y: newY, isAuto: false } : p);
-      return assignPortsWithLetterMap(next, wiringOrder, letterPortMap, disconnectedAfter);
-    });
+    setPixels(prev => prev.map(p => p.id === id ? { ...p, x: newX, y: newY, isAuto: false } : p));
     setLastAction({ type: 'move', id, x: newX, y: newY });
-  }, [wiringOrder, letterPortMap, disconnectedAfter]);
+  }, []);
 
   // ── Pixel select ──────────────────────────────────────────────────────────
   const handlePixelSelect = useCallback((ids, multi = false) => {
