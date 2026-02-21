@@ -5,7 +5,7 @@ import LedCanvas from './components/LedCanvas';
 import ExportPanel from './components/ExportPanel';
 import { parseFont, getGlyphPathMm, getAdvanceWidth } from './utils/fontParser';
 import { generatePixelsForText, buildPixelObjects } from './utils/pixelUtils';
-import { autoSnakeWiring, assignPorts, assignPortsWithLetterMap, computeLetterZoom, buildInitialPortNodes } from './utils/wireUtils';
+import { autoSnakeWiringPerLetter, assignPortsWithLetterMap, computeLetterZoom, buildInitialPortNodes } from './utils/wireUtils';
 import { generateDXF, generateCJB, downloadFile } from './utils/exportUtils';
 
 // Maximum undo history steps
@@ -56,9 +56,17 @@ export default function App() {
   // ── Port Nodes (T8000 controller ports) ──────────────────────────────────
   const [portNodes, setPortNodes] = useState(buildInitialPortNodes());
   const [letterPortMap, setLetterPortMap] = useState({}); // { letterIndex: portIndex }
-  const [disconnectedAfter, setDisconnectedAfter] = useState(new Set()); // Set<letterIndex>
   const [selectedPortIndex, setSelectedPortIndex] = useState(null); // Currently selected port for connection
-  const [activePortTool, setActivePortTool] = useState(false); // Port placement/connection mode
+  const [visiblePorts, setVisiblePorts] = useState(new Set()); // Which ports are visible on canvas
+
+  // ── Letter Wiring Approval (per-letter two-stage wiring) ─────────────────
+  const [approvedLetters, setApprovedLetters] = useState(new Set()); // Set<letterIndex> - letters with approved wiring
+
+  // ── Wire Connect Tool State ──────────────────────────────────────────────
+  const [wireConnectStart, setWireConnectStart] = useState(null); // First pixel in wire connect
+
+  // ── Manual Wire Connections (user-drawn lines between pixels) ────────────
+  const [manualWires, setManualWires] = useState([]); // Array of { from: pixelId, to: pixelId }
 
   // ── Undo History ─────────────────────────────────────────────────────────
   const [history, setHistory] = useState([]);
