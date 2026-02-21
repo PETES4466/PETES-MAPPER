@@ -428,9 +428,11 @@ export default function App() {
         pixelCount={pixels.length}
         onUndo={handleUndo}
         canUndo={historyIndex > 0}
-        onDisconnectLetterWiring={handleDisconnectLetterWiring}
         selectedLetterIndex={selectedLetterIndex}
-        disconnectedAfter={disconnectedAfter}
+        approvedLetters={approvedLetters}
+        onApproveLetterWiring={handleApproveLetterWiring}
+        onUnapproveLetterWiring={handleUnapproveLetterWiring}
+        wireConnectStart={wireConnectStart}
       />
 
       <div className="canvas-area">
@@ -465,25 +467,26 @@ export default function App() {
           portNodes={portNodes}
           onPortNodeMove={handlePortNodeMove}
           letterPortMap={letterPortMap}
-          disconnectedAfter={disconnectedAfter}
+          visiblePorts={visiblePorts}
           selectedPortIndex={selectedPortIndex}
           onConnectPortToLetter={handleConnectPortToLetter}
-          activePortTool={activePortTool}
+          approvedLetters={approvedLetters}
+          manualWires={manualWires}
+          wireConnectStart={wireConnectStart}
+          onWireConnectClick={handleWireConnectClick}
         />
 
         <div className="canvas-statusbar">
           <span>Selected: <span className="status-val">{selectedIds.size}</span></span>
-          <span>Border: <span className="status-val">{pixels.filter(p=>p.type==='border').length}</span></span>
-          <span>Fill: <span className="status-val">{pixels.filter(p=>p.type==='fill').length}</span></span>
-          <span>Broken: <span className="status-val" style={{ color: pixels.some(p=>p.wiringBroken)?'var(--danger)':'inherit' }}>
-            {pixels.filter(p=>p.wiringBroken).length}
+          <span>Border: <span className="status-val" style={{ color: '#00d4ff' }}>{pixels.filter(p=>p.type==='border').length}</span></span>
+          <span>Fill: <span className="status-val" style={{ color: '#6bcb77' }}>{pixels.filter(p=>p.type==='fill').length}</span></span>
+          <span>Approved: <span className="status-val" style={{ color: approvedLetters.size > 0 ? 'var(--success)' : 'inherit' }}>
+            {approvedLetters.size}/{new Set(pixels.map(p => p.letterIndex)).size}
           </span></span>
           {pendingWire.length > 0 && <span style={{ color: 'var(--accent)' }}>Wire chain: <span className="status-val">{pendingWire.length}</span></span>}
+          {wireConnectStart && <span style={{ color: 'var(--warning)' }}>Wire connect: click 2nd pixel</span>}
           {isBreakApart && selectedLetterIndex !== null && (
-            <span style={{ color: 'var(--accent2)' }}>Letter selected: index {selectedLetterIndex}</span>
-          )}
-          {historyIndex > 0 && (
-            <span style={{ color: 'var(--muted)' }}>Undo: <span className="status-val">{historyIndex}</span></span>
+            <span style={{ color: 'var(--accent2)' }}>Letter: {text[selectedLetterIndex] || selectedLetterIndex}</span>
           )}
         </div>
       </div>
@@ -498,6 +501,7 @@ export default function App() {
         onExport={handleExport}
         portNodes={portNodes}
         letterPortMap={letterPortMap}
+        visiblePorts={visiblePorts}
         selectedPortIndex={selectedPortIndex}
         onSelectPort={handleSelectPort}
         text={text}
