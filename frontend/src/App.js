@@ -83,13 +83,14 @@ export default function App() {
   const letterSpacingMm = letterSpacingCm * 10;
 
   // ── Save state to history ────────────────────────────────────────────────
-  const saveToHistory = useCallback((newPixels, newWiringOrder, newPortNodes, newLetterPortMap, newDisconnectedAfter) => {
+  const saveToHistory = useCallback((newPixels, newWiringOrder, newPortNodes, newLetterPortMap, newApprovedLetters, newManualWires) => {
     const snapshot = {
       pixels: JSON.parse(JSON.stringify(newPixels)),
       wiringOrder: [...newWiringOrder],
       portNodes: JSON.parse(JSON.stringify(newPortNodes)),
       letterPortMap: { ...newLetterPortMap },
-      disconnectedAfter: new Set(newDisconnectedAfter),
+      approvedLetters: new Set(newApprovedLetters || []),
+      manualWires: [...(newManualWires || [])],
       selectedIds: new Set()
     };
     
@@ -117,7 +118,8 @@ export default function App() {
     setWiringOrder(snapshot.wiringOrder);
     setPortNodes(snapshot.portNodes);
     setLetterPortMap(snapshot.letterPortMap);
-    setDisconnectedAfter(snapshot.disconnectedAfter);
+    setApprovedLetters(snapshot.approvedLetters || new Set());
+    setManualWires(snapshot.manualWires || []);
     setSelectedIds(snapshot.selectedIds);
     setHistoryIndex(newIndex);
   }, [history, historyIndex]);
