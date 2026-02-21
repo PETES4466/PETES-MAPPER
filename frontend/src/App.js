@@ -358,18 +358,15 @@ export default function App() {
     const newMap = { ...letterPortMap, [key]: portIndex };
     setLetterPortMap(newMap);
     
-    // Re-assign ports with new mapping
-    const wired = assignPortsWithLetterMap(pixels, wiringOrder, newMap, disconnectedAfter);
-    setPixels(wired);
     setSelectedPortIndex(null);
-    saveToHistory(wired, wiringOrder, portNodes, newMap, disconnectedAfter);
-  }, [letterPortMap, pixels, wiringOrder, disconnectedAfter, portNodes, saveToHistory]);
+    saveToHistory(pixels, wiringOrder, portNodes, newMap, approvedLetters, manualWires);
+  }, [letterPortMap, pixels, wiringOrder, portNodes, approvedLetters, manualWires, saveToHistory]);
 
   // ── Select port for connection ────────────────────────────────────────────
   const handleSelectPort = useCallback((portIndex) => {
-    setSelectedPortIndex(prev => prev === portIndex ? null : portIndex);
-    setActivePortTool(true);
-  }, []);
+    // Toggle port visibility and selection
+    handleTogglePortVisibility(portIndex);
+  }, [handleTogglePortVisibility]);
 
   // ── Copy / Paste / Delete ─────────────────────────────────────────────────
   const handleCopy   = useCallback(() => setClipboard(pixels.filter(p => selectedIds.has(p.id))), [pixels, selectedIds]);
@@ -378,24 +375,22 @@ export default function App() {
     let c = Date.now();
     const newPx = clipboard.map(p => ({ ...p, id: `px_paste_${c++}`, x: p.x + 10, y: p.y + 10, isAuto: false }));
     const all   = [...pixels, ...newPx];
-    const order = autoSnakeWiring(all, wiringDirection);
-    const wired = assignPortsWithLetterMap(all, order, letterPortMap, disconnectedAfter);
-    setPixels(wired);
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(all, wiringDirection, edgeMarginMm);
+    setPixels(wiredPixels);
     setWiringOrder(order);
     setSelectedIds(new Set(newPx.map(p => p.id)));
-    saveToHistory(wired, order, portNodes, letterPortMap, disconnectedAfter);
-  }, [clipboard, pixels, wiringDirection, letterPortMap, disconnectedAfter, portNodes, saveToHistory]);
+    saveToHistory(wiredPixels, order, portNodes, letterPortMap, approvedLetters, manualWires);
+  }, [clipboard, pixels, wiringDirection, edgeMarginMm, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
   
   const handleDelete = useCallback(() => {
     if (!selectedIds.size) return;
     const rem = pixels.filter(p => !selectedIds.has(p.id));
     const ord = wiringOrder.filter(id => !selectedIds.has(id));
-    const wired = assignPortsWithLetterMap(rem, ord, letterPortMap, disconnectedAfter);
-    setPixels(wired);
+    setPixels(rem);
     setWiringOrder(ord);
     setSelectedIds(new Set());
-    saveToHistory(wired, ord, portNodes, letterPortMap, disconnectedAfter);
-  }, [selectedIds, pixels, wiringOrder, letterPortMap, disconnectedAfter, portNodes, saveToHistory]);
+    saveToHistory(rem, ord, portNodes, letterPortMap, approvedLetters, manualWires);
+  }, [selectedIds, pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
 
   // ── Export ────────────────────────────────────────────────────────────────
   const handleExport = useCallback(() => {
