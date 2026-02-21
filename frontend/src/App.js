@@ -227,38 +227,56 @@ export default function App() {
     setLastAction({ type: 'wire', pixelId });
   }, []);
 
+  // ── Wire Connect Tool - connect two pixels with a line ────────────────────
+  const handleWireConnectClick = useCallback((pixelId) => {
+    if (wireConnectStart === null) {
+      // First click - set start pixel
+      setWireConnectStart(pixelId);
+    } else {
+      // Second click - create wire connection
+      if (wireConnectStart !== pixelId) {
+        const newWire = { from: wireConnectStart, to: pixelId };
+        const newWires = [...manualWires, newWire];
+        setManualWires(newWires);
+        saveToHistory(pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, newWires);
+      }
+      setWireConnectStart(null);
+    }
+  }, [wireConnectStart, manualWires, pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, saveToHistory]);
+
   // ── Break wiring ──────────────────────────────────────────────────────────
   const handleBreakWiring = useCallback(() => {
     if (!selectedIds.size) return;
     const newPixels = pixels.map(p => selectedIds.has(p.id) ? { ...p, wiringBroken: true } : p);
     setPixels(newPixels);
-    saveToHistory(newPixels, wiringOrder, portNodes, letterPortMap, disconnectedAfter);
-  }, [selectedIds, pixels, wiringOrder, portNodes, letterPortMap, disconnectedAfter, saveToHistory]);
+    saveToHistory(newPixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires);
+  }, [selectedIds, pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
 
   // ── Restore wiring ────────────────────────────────────────────────────────
   const handleRestoreWiring = useCallback(() => {
     if (!selectedIds.size) return;
     const newPixels = pixels.map(p => selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p);
     setPixels(newPixels);
-    saveToHistory(newPixels, wiringOrder, portNodes, letterPortMap, disconnectedAfter);
-  }, [selectedIds, pixels, wiringOrder, portNodes, letterPortMap, disconnectedAfter, saveToHistory]);
+    saveToHistory(newPixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires);
+  }, [selectedIds, pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
 
-  // ── Disconnect wiring between letters ─────────────────────────────────────
-  const handleDisconnectLetterWiring = useCallback(() => {
+  // ── Approve letter wiring (two-stage: draft -> approved) ──────────────────
+  const handleApproveLetterWiring = useCallback(() => {
     if (selectedLetterIndex === null) return;
-    const newDisconnected = new Set(disconnectedAfter);
-    if (newDisconnected.has(selectedLetterIndex)) {
-      newDisconnected.delete(selectedLetterIndex);
-    } else {
-      newDisconnected.add(selectedLetterIndex);
-    }
-    setDisconnectedAfter(newDisconnected);
-    
-    // Re-assign ports with new disconnection
-    const wired = assignPortsWithLetterMap(pixels, wiringOrder, letterPortMap, newDisconnected);
-    setPixels(wired);
-    saveToHistory(wired, wiringOrder, portNodes, letterPortMap, newDisconnected);
-  }, [selectedLetterIndex, disconnectedAfter, pixels, wiringOrder, letterPortMap, portNodes, saveToHistory]);
+    const newApproved = new Set(approvedLetters);
+    newApproved.add(selectedLetterIndex);
+    setApprovedLetters(newApproved);
+    saveToHistory(pixels, wiringOrder, portNodes, letterPortMap, newApproved, manualWires);
+  }, [selectedLetterIndex, approvedLetters, pixels, wiringOrder, portNodes, letterPortMap, manualWires, saveToHistory]);
+
+  // ── Unapprove letter wiring ───────────────────────────────────────────────
+  const handleUnapproveLetterWiring = useCallback(() => {
+    if (selectedLetterIndex === null) return;
+    const newApproved = new Set(approvedLetters);
+    newApproved.delete(selectedLetterIndex);
+    setApprovedLetters(newApproved);
+    saveToHistory(pixels, wiringOrder, portNodes, letterPortMap, newApproved, manualWires);
+  }, [selectedLetterIndex, approvedLetters, pixels, wiringOrder, portNodes, letterPortMap, manualWires, saveToHistory]);
 
   // ── Add pixel at position ─────────────────────────────────────────────────
   const handleAddPixel = useCallback((xMm, yMm) => {
@@ -269,28 +287,33 @@ export default function App() {
       type: 'fill',
       letter: '?', letterIndex: 0,
       portIndex: -1, portPixelIndex: -1,
-      wiringOrder: -1,
-      isFirst: false, isLast: false,
+      borderOrder: -1, fillOrder: -1,
+      isBorderFirst: false, isBorderLast: false,
+      isFillFirst: false, isFillLast: false,
       isAuto: false, wiringBroken: false, selected: false
     };
     const allPx = [...pixels, newPx];
     const order = [...wiringOrder, newPx.id];
-    const wired = assignPortsWithLetterMap(allPx, order, letterPortMap, disconnectedAfter);
-    setPixels(wired);
+    setPixels(allPx);
     setWiringOrder(order);
     setSelectedIds(new Set([newPx.id]));
     setLastAction({ type: 'addPixel', id: newPx.id });
-    saveToHistory(wired, order, portNodes, letterPortMap, disconnectedAfter);
-  }, [pixels, wiringOrder, letterPortMap, disconnectedAfter, portNodes, saveToHistory]);
+    saveToHistory(allPx, order, portNodes, letterPortMap, approvedLetters, manualWires);
+  }, [pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
 
   // ── Right-click escape (cancel last operation) ────────────────────────────
   const handleEscape = useCallback(() => {
+    if (wireConnectStart !== null) {
+      // Cancel wire connect in progress
+      setWireConnectStart(null);
+      return;
+    }
     if (lastAction) {
       if (lastAction.type === 'addPixel') {
         // Remove the last added pixel
         const newPixels = pixels.filter(p => p.id !== lastAction.id);
         const newOrder = wiringOrder.filter(id => id !== lastAction.id);
-        setPixels(assignPortsWithLetterMap(newPixels, newOrder, letterPortMap, disconnectedAfter));
+        setPixels(newPixels);
         setWiringOrder(newOrder);
         setSelectedIds(new Set());
       } else if (lastAction.type === 'wire') {
@@ -303,9 +326,8 @@ export default function App() {
       setSelectedIds(new Set());
       setPendingWire([]);
       setSelectedPortIndex(null);
-      setActivePortTool(false);
     }
-  }, [lastAction, pixels, wiringOrder, letterPortMap, disconnectedAfter]);
+  }, [lastAction, pixels, wiringOrder, wireConnectStart]);
 
   // ── Port node drag ────────────────────────────────────────────────────────
   const handlePortNodeMove = useCallback((portIndex, newX, newY) => {
@@ -314,9 +336,26 @@ export default function App() {
     ));
   }, []);
 
+  // ── Toggle port visibility ────────────────────────────────────────────────
+  const handleTogglePortVisibility = useCallback((portIndex) => {
+    setVisiblePorts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(portIndex)) {
+        newSet.delete(portIndex);
+        setSelectedPortIndex(null);
+      } else {
+        newSet.add(portIndex);
+        setSelectedPortIndex(portIndex);
+      }
+      return newSet;
+    });
+  }, []);
+
   // ── Connect port to letter ────────────────────────────────────────────────
-  const handleConnectPortToLetter = useCallback((portIndex, letterIndex) => {
-    const newMap = { ...letterPortMap, [letterIndex]: portIndex };
+  const handleConnectPortToLetter = useCallback((portIndex, letterIndex, pixelType) => {
+    // pixelType is 'border' or 'fill'
+    const key = `${letterIndex}_${pixelType}`;
+    const newMap = { ...letterPortMap, [key]: portIndex };
     setLetterPortMap(newMap);
     
     // Re-assign ports with new mapping
