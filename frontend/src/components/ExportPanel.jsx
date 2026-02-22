@@ -58,13 +58,17 @@ export default function ExportPanel({
       <div className="panel-section">
         <div className="section-title">T8000 Ports (8 × 1024)</div>
         <div className="tooltip-hint" style={{ marginBottom: 8 }}>
-          Click a port to select it, then click a letter on canvas to connect
+          Click port to show on canvas. Then click letter's start node to connect.
         </div>
         {portStats.stats.map((s, i) => {
+          const isVisible = visiblePorts?.has(i) || false;
           const isSelected = selectedPortIndex === i;
-          const connectedLetters = Object.entries(letterPortMap || {})
+          const connectedItems = Object.entries(letterPortMap || {})
             .filter(([_, pIdx]) => pIdx === i)
-            .map(([lIdx]) => text?.[parseInt(lIdx)] || `#${lIdx}`)
+            .map(([key]) => {
+              const [lIdx, pType] = key.split('_');
+              return `${text?.[parseInt(lIdx)] || '?'}(${pType?.[0]?.toUpperCase() || '?'})`;
+            })
             .join(', ');
           
           return (
@@ -73,14 +77,14 @@ export default function ExportPanel({
                 className={`port-btn ${isSelected ? 'selected' : ''}`}
                 style={{ 
                   color: PORT_COLORS[i], 
-                  borderColor: isSelected ? PORT_COLORS[i] : 'var(--border)',
-                  background: isSelected ? `${PORT_COLORS[i]}22` : 'transparent'
+                  borderColor: isVisible ? PORT_COLORS[i] : 'var(--border)',
+                  background: isVisible ? `${PORT_COLORS[i]}22` : 'transparent'
                 }}
                 onClick={() => onSelectPort?.(i)}
                 data-testid={`port-select-${i+1}`}
-                title={connectedLetters ? `Connected to: ${connectedLetters}` : 'Click to select port'}
+                title={connectedItems ? `Connected to: ${connectedItems}` : 'Click to show/select port'}
               >
-                <Plug size={10}/> P{i+1}
+                {isVisible ? <Eye size={10}/> : <EyeOff size={10}/>} P{i+1}
               </button>
               <div className="port-bar-track">
                 <div className="port-bar-fill"
@@ -100,7 +104,7 @@ export default function ExportPanel({
         {selectedPortIndex !== null && (
           <div style={{ marginTop: 6, padding: 6, background: 'rgba(0,212,255,0.08)', 
             borderRadius: 4, fontSize: 11, color: 'var(--accent)' }}>
-            Port {selectedPortIndex + 1} selected — click a letter's start node to connect
+            Port {selectedPortIndex + 1} selected — click a letter's BS/FS (Border/Fill Start) to connect
           </div>
         )}
       </div>
