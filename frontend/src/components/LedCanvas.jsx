@@ -300,62 +300,94 @@ export default function LedCanvas({
         ctx.stroke();
         ctx.restore();
       }
+    }
 
-      // ── Manual dot ─────────────────────────────────────────────────────
-      if (!p.isAuto && !isBroken && r > 5) {
+    // ── Start/End markers (separate for border and fill) ───────────────────
+    for (const p of pixels) {
+      const isBorderStart = p.isBorderFirst;
+      const isBorderEnd = p.isBorderLast;
+      const isFillStart = p.isFillFirst;
+      const isFillEnd = p.isFillLast;
+      
+      if (!isBorderStart && !isBorderEnd && !isFillStart && !isFillEnd) continue;
+      
+      const px = livePixelRef.current[p.id]?.x ?? p.x;
+      const py = livePixelRef.current[p.id]?.y ?? p.y;
+      const { sx, sy } = toScreen(px, py);
+      
+      // Border Start/End
+      if (isBorderStart || isBorderEnd) {
+        const color = isBorderStart ? '#00ff88' : '#ff4444';
+        const label = isBorderStart ? 'BS' : 'BE';
+        
         ctx.save();
-        ctx.fillStyle = '#ff9f43';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 12;
         ctx.beginPath();
-        ctx.arc(sx + r * 0.6, sy - r * 0.6, 2.5, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(sx, sy, r * 1.7, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        
+        ctx.fillStyle = color;
+        const fs = Math.max(7, r * 0.8);
+        ctx.font = `bold ${fs}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, sx, sy);
+        
+        // Label above
+        if (r > 6) {
+          ctx.font = `bold ${Math.max(7, r * 0.6)}px sans-serif`;
+          ctx.fillText(isBorderStart ? `▶B ${p.borderOrder}` : `B ${p.borderOrder}◀`, sx, sy - r * 2.3);
+        }
+        ctx.restore();
+      }
+      
+      // Fill Start/End
+      if (isFillStart || isFillEnd) {
+        const color = isFillStart ? '#88ff00' : '#ff8844';
+        const label = isFillStart ? 'FS' : 'FE';
+        
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r * 1.7, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        
+        ctx.fillStyle = color;
+        const fs = Math.max(7, r * 0.8);
+        ctx.font = `bold ${fs}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, sx, sy);
+        
+        // Label above
+        if (r > 6) {
+          ctx.font = `bold ${Math.max(7, r * 0.6)}px sans-serif`;
+          ctx.fillText(isFillStart ? `▶F ${p.fillOrder}` : `F ${p.fillOrder}◀`, sx, sy - r * 2.3);
+        }
         ctx.restore();
       }
     }
 
-    // ── Prominent FIRST / LAST markers ───────────────────────────────────
-    for (const p of pixels) {
-      if (!p.isFirst && !p.isLast) continue;
-      const px = livePixelRef.current[p.id]?.x ?? p.x;
-      const py = livePixelRef.current[p.id]?.y ?? p.y;
-      const { sx, sy } = toScreen(px, py);
-      const color = p.isFirst ? '#00ff88' : '#ff4444';
-      const label = p.isFirst ? 'S' : 'E';
-
-      ctx.save();
-      // Outer pulsing ring
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2.5;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.arc(sx, sy, r * 1.7, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // Fill center triangle / arrow
-      ctx.fillStyle = color;
-      const fs = Math.max(9, r * 1.0);
-      ctx.font = `bold ${fs}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, sx, sy);
-
-      // Label above
-      if (r > 6) {
-        ctx.font = `bold ${Math.max(8, r * 0.7)}px sans-serif`;
-        ctx.fillStyle = color;
-        ctx.fillText(p.isFirst ? `▶ ${p.letter}` : `${p.letter} ◀`, sx, sy - r * 2.3);
-      }
-      ctx.restore();
-    }
-
-    // ── Pixel numbers ─────────────────────────────────────────────────────
+    // ── Pixel numbers (border order / fill order) ──────────────────────────
     if (showNumRef.current && r > 5) {
       ctx.save();
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = `${Math.max(7, Math.min(11, r * 0.8))}px monospace`;
       for (const p of pixels) {
-        if (p.wiringOrder < 0 || p.isFirst || p.isLast) continue;
+        // Skip start/end markers (they have their own labels)
+        if (p.isBorderFirst || p.isBorderLast || p.isFillFirst || p.isFillLast) continue;
+        
+        const order = p.type === 'border' ? p.borderOrder : p.fillOrder;
+        if (order < 0) continue;
+        
         const px = livePixelRef.current[p.id]?.x ?? p.x;
         const py = livePixelRef.current[p.id]?.y ?? p.y;
         const { sx, sy } = toScreen(px, py);
