@@ -1,7 +1,14 @@
+// Wire utilities for LED sign design tool
+// Handles per-letter wiring with separate border/fill sequences
+
 export const PORT_COLORS = [
   '#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF',
   '#FF9F43', '#A29BFE', '#FD79A8', '#00CEC9'
 ];
+
+// Border = cyan, Fill = green (distinct colors)
+export const BORDER_COLOR = '#00d4ff';
+export const FILL_COLOR = '#6bcb77';
 
 export const LETTER_COLORS = [
   '#00d4ff', '#00ff88', '#ffd93d', '#ff6b6b',
@@ -71,10 +78,47 @@ function smartSnakeFill(pixels, direction = 'ltr-ttb') {
   return result;
 }
 
-// ── Main auto-snake wiring ────────────────────────────────────────────────────
-export function autoSnakeWiring(pixels, direction = 'ltr-ttb') {
-  if (!pixels.length) return [];
+// Ensure start and end pixels are not overlapping (minimum spacing)
+function ensureStartEndSpacing(orderedPixels, minSpacing) {
+  if (orderedPixels.length < 2) return orderedPixels;
+  
+  const first = orderedPixels[0];
+  const last = orderedPixels[orderedPixels.length - 1];
+  
+  // If start and end are too close, try to find a better end point
+  if (dist(first, last) < minSpacing && orderedPixels.length > 2) {
+    // Find the pixel that is farthest from the first pixel
+    let maxDist = 0;
+    let bestEndIdx = orderedPixels.length - 1;
+    for (let i = 1; i < orderedPixels.length; i++) {
+      const d = dist(first, orderedPixels[i]);
+      if (d > maxDist) {
+        maxDist = d;
+        bestEndIdx = i;
+      }
+    }
+    
+    // Reorder: move best end to the end
+    if (bestEndIdx !== orderedPixels.length - 1) {
+      const reordered = [...orderedPixels];
+      const [endPixel] = reordered.splice(bestEndIdx, 1);
+      reordered.push(endPixel);
+      return reordered;
+    }
+  }
+  
+  return orderedPixels;
+}
 
+// ── Per-letter wiring with separate border/fill sequences ────────────────────
+// Each letter has:
+//   - Border pixels: numbered 1 to N with borderFirst/borderLast markers
+//   - Fill pixels: numbered 1 to M with fillFirst/fillLast markers
+// NO auto-connection between letters
+export function autoSnakeWiringPerLetter(pixels, direction = 'ltr-ttb', minSpacing = 12) {
+  if (!pixels.length) return { wiredPixels: [], wiringOrder: [] };
+
+  // Group by letter
   const byLetter = {};
   for (const p of pixels) {
     const k = p.letterIndex ?? 0;
@@ -82,98 +126,100 @@ export function autoSnakeWiring(pixels, direction = 'ltr-ttb') {
     byLetter[k][p.type === 'fill' ? 'fill' : 'border'].push(p);
   }
 
-  const ordered = [];
+  const wiredPixels = [];
+  const wiringOrder = [];
   const letterKeys = Object.keys(byLetter).map(Number).sort((a, b) => a - b);
 
-  for (const lk of letterKeys) {
-    const { border, fill } = byLetter[lk];
-    ordered.push(...border);
-    ordered.push(...smartSnakeFill(fill, direction));
+  for (const letterIdx of letterKeys) {
+    const { border, fill } = byLetter[letterIdx];
+    
+    // Process border pixels for this letter
+    let orderedBorder = border.length > 0 ? [...border] : [];
+    if (orderedBorder.length > 0) {
+      // Border follows contour - already in order from placement, just apply snake
+      orderedBorder = ensureStartEndSpacing(orderedBorder, minSpacing);
+      
+      orderedBorder.forEach((p, idx) => {
+        const wiredP = {
+          ...p,
+          borderOrder: idx + 1,
+          fillOrder: -1,
+          isBorderFirst: idx === 0,
+          isBorderLast: idx === orderedBorder.length - 1,
+          isFillFirst: false,
+          isFillLast: false,
+          portIndex: -1,
+          portPixelIndex: -1
+        };
+        wiredPixels.push(wiredP);
+        wiringOrder.push(wiredP.id);
+      });
+    }
+    
+    // Process fill pixels for this letter
+    let orderedFill = fill.length > 0 ? smartSnakeFill(fill, direction) : [];
+    if (orderedFill.length > 0) {
+      orderedFill = ensureStartEndSpacing(orderedFill, minSpacing);
+      
+      orderedFill.forEach((p, idx) => {
+        const wiredP = {
+          ...p,
+          borderOrder: -1,
+          fillOrder: idx + 1,
+          isBorderFirst: false,
+          isBorderLast: false,
+          isFillFirst: idx === 0,
+          isFillLast: idx === orderedFill.length - 1,
+          portIndex: -1,
+          portPixelIndex: -1
+        };
+        wiredPixels.push(wiredP);
+        wiringOrder.push(wiredP.id);
+      });
+    }
   }
 
-  return ordered.map(p => p.id);
+  return { wiredPixels, wiringOrder };
 }
 
 // ── Port assignment with letter-to-port mapping ───────────────────────────────
-// letterPortMap: { letterIndex → portIndex } explicit assignments
-// disconnectedAfter: Set<letterIndex> – visual gap but numbering continues
+// letterPortMap: { "letterIndex_type": portIndex } e.g., { "0_border": 0, "0_fill": 1 }
 export function assignPortsWithLetterMap(
   pixels, wiringOrder,
-  letterPortMap = {}, disconnectedAfter = new Set(),
+  letterPortMap = {},
   portCount = PORT_COUNT, pixelsPerPort = PORT_PIXEL_LIMIT
 ) {
   const pixelMap = {};
   for (const p of pixels) pixelMap[p.id] = p;
 
-  // Determine letter order from wiringOrder
-  const letterOrder = [];
-  const seenLetters = new Set();
-  for (const id of wiringOrder) {
-    const p = pixelMap[id];
-    if (!p) continue;
-    const li = p.letterIndex ?? 0;
-    if (!seenLetters.has(li)) { seenLetters.add(li); letterOrder.push(li); }
-  }
-
-  // Resolve effective port for each letter
-  let currentPort = letterPortMap[letterOrder[0]] ?? 0;
-  const letterEffectivePort = {};
-  for (const li of letterOrder) {
-    if (letterPortMap[li] !== undefined) currentPort = letterPortMap[li];
-    letterEffectivePort[li] = currentPort;
-  }
-
   // Track per-port running counts
   const portCounts = Object.fromEntries(Array.from({length: portCount}, (_, i) => [i, 0]));
-  let prevLetterIndex = -1;
 
-  // First/last per letter
-  const letterFL = {};
-  wiringOrder.forEach((id, idx) => {
-    const p = pixelMap[id]; if (!p) return;
-    const lk = p.letterIndex ?? 0;
-    if (!letterFL[lk]) letterFL[lk] = { first: idx, last: idx };
-    else letterFL[lk].last = idx;
-  });
-
-  const updated = pixels.map(p => ({ ...p }));
-  const updMap = {};
-  for (const p of updated) updMap[p.id] = p;
-
-  wiringOrder.forEach((id, seqIdx) => {
-    const p = updMap[id]; if (!p) return;
-    const li = p.letterIndex ?? 0;
-    const pi = letterEffectivePort[li] ?? 0;
-
-    // Reset portPixelIndex if this letter has an explicit new port assignment
-    if (li !== prevLetterIndex && letterPortMap[li] !== undefined) {
-      portCounts[pi] = 0;
+  const updated = pixels.map(p => {
+    const newP = { ...p };
+    const key = `${p.letterIndex ?? 0}_${p.type}`;
+    const portIdx = letterPortMap[key];
+    
+    if (portIdx !== undefined) {
+      portCounts[portIdx]++;
+      newP.portIndex = portIdx;
+      newP.portPixelIndex = portCounts[portIdx];
+    } else {
+      newP.portIndex = -1;
+      newP.portPixelIndex = -1;
     }
-    prevLetterIndex = li;
-
-    portCounts[pi]++;
-    p.wiringOrder    = seqIdx + 1;
-    p.portIndex      = pi;
-    p.portPixelIndex = portCounts[pi];
-    p.isFirst = letterFL[li]?.first === seqIdx;
-    p.isLast  = letterFL[li]?.last  === seqIdx;
-    // Mark if wiring is disconnected after this letter
-    p.disconnectedAfter = disconnectedAfter.has(li) && p.isLast;
+    
+    return newP;
   });
 
   return updated;
-}
-
-// Fallback: classic count-based auto assign
-export function assignPorts(pixels, wiringOrder, portCount = PORT_COUNT, pixelsPerPort = PORT_PIXEL_LIMIT) {
-  return assignPortsWithLetterMap(pixels, wiringOrder, {}, new Set(), portCount, pixelsPerPort);
 }
 
 // ── Port stats ────────────────────────────────────────────────────────────────
 export function getPortStats(pixels, portCount = PORT_COUNT, pixelsPerPort = PORT_PIXEL_LIMIT) {
   const stats = Array.from({ length: portCount }, (_, i) => ({ port: i + 1, count: 0, overflow: false }));
   for (const p of pixels) {
-    const pi = p.portIndex ?? 0;
+    const pi = p.portIndex ?? -1;
     if (pi >= 0 && pi < portCount) stats[pi].count++;
   }
   stats.forEach(s => { s.overflow = s.count > pixelsPerPort; });
@@ -206,16 +252,24 @@ export function buildInitialPortNodes() {
   }));
 }
 
-// Get the first pixel of a letter (for port connection lines)
-export function getLetterStartPixel(pixels, letterIndex) {
-  const letterPixels = pixels.filter(p => (p.letterIndex ?? 0) === letterIndex);
-  return letterPixels.find(p => p.isFirst) || letterPixels[0] || null;
+// Get the first pixel of a letter's border (for port connection lines)
+export function getLetterBorderStartPixel(pixels, letterIndex) {
+  return pixels.find(p => (p.letterIndex ?? 0) === letterIndex && p.type === 'border' && p.isBorderFirst) || null;
 }
 
-// Get the last pixel of a letter (for end node display)
-export function getLetterEndPixel(pixels, letterIndex) {
-  const letterPixels = pixels.filter(p => (p.letterIndex ?? 0) === letterIndex);
-  return letterPixels.find(p => p.isLast) || letterPixels[letterPixels.length - 1] || null;
+// Get the first pixel of a letter's fill (for port connection lines)
+export function getLetterFillStartPixel(pixels, letterIndex) {
+  return pixels.find(p => (p.letterIndex ?? 0) === letterIndex && p.type === 'fill' && p.isFillFirst) || null;
+}
+
+// Get the last pixel of a letter's border
+export function getLetterBorderEndPixel(pixels, letterIndex) {
+  return pixels.find(p => (p.letterIndex ?? 0) === letterIndex && p.type === 'border' && p.isBorderLast) || null;
+}
+
+// Get the last pixel of a letter's fill
+export function getLetterFillEndPixel(pixels, letterIndex) {
+  return pixels.find(p => (p.letterIndex ?? 0) === letterIndex && p.type === 'fill' && p.isFillLast) || null;
 }
 
 // Get unique letter indices from pixels
@@ -225,4 +279,18 @@ export function getUniqueLetterIndices(pixels) {
     indices.add(p.letterIndex ?? 0);
   }
   return [...indices].sort((a, b) => a - b);
+}
+
+// Get letter stats: border count, fill count, approved status
+export function getLetterStats(pixels, approvedLetters = new Set()) {
+  const stats = {};
+  for (const p of pixels) {
+    const li = p.letterIndex ?? 0;
+    if (!stats[li]) {
+      stats[li] = { letterIndex: li, borderCount: 0, fillCount: 0, approved: approvedLetters.has(li) };
+    }
+    if (p.type === 'border') stats[li].borderCount++;
+    else stats[li].fillCount++;
+  }
+  return Object.values(stats);
 }
