@@ -23,6 +23,102 @@ function dist(a, b) {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 }
 
+// Check if a line segment intersects with a "boundary" - used for smart wiring
+function lineIntersectsEmptySpace(p1, p2, allPixels, letterIndex, threshold = 30) {
+  // Simple heuristic: check if the midpoint of the line is too far from any pixel
+  // This prevents wiring across empty gaps in letters like 'H', 'A', 'O'
+  const midX = (p1.x + p2.x) / 2;
+  const midY = (p1.y + p2.y) / 2;
+  const distance = dist(p1, p2);
+  
+  // Short distances are always OK
+  if (distance < threshold) return false;
+  
+  // Check if midpoint is close to any pixel of this letter
+  const letterPixels = allPixels.filter(p => (p.letterIndex ?? 0) === letterIndex);
+  for (const p of letterPixels) {
+    const d = dist({ x: midX, y: midY }, p);
+    if (d < threshold * 0.7) return false;
+  }
+  
+  // Check along the line at intervals
+  const steps = Math.ceil(distance / (threshold * 0.5));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const checkX = p1.x + (p2.x - p1.x) * t;
+    const checkY = p1.y + (p2.y - p1.y) * t;
+    
+    let nearestDist = Infinity;
+    for (const p of letterPixels) {
+      nearestDist = Math.min(nearestDist, dist({ x: checkX, y: checkY }, p));
+    }
+    
+    // If any point along the line is too far from pixels, it crosses empty space
+    if (nearestDist > threshold * 0.8) return true;
+  }
+  
+  return false;
+}
+
+// Nearest neighbor wiring algorithm - stays within letter boundaries
+function nearestNeighborWiring(pixels, letterIndex, pixelType) {
+  if (pixels.length === 0) return [];
+  if (pixels.length === 1) return [...pixels];
+  
+  const letterPixels = pixels.filter(p => 
+    (p.letterIndex ?? 0) === letterIndex && p.type === pixelType
+  );
+  
+  if (letterPixels.length <= 1) return letterPixels;
+  
+  // Start from top-left most pixel
+  const sorted = [...letterPixels].sort((a, b) => {
+    const aScore = a.x + a.y * 0.5;
+    const bScore = b.x + b.y * 0.5;
+    return aScore - bScore;
+  });
+  
+  const result = [];
+  const remaining = new Set(sorted.map(p => p.id));
+  let current = sorted[0];
+  
+  result.push(current);
+  remaining.delete(current.id);
+  
+  // Greedy nearest neighbor with boundary check
+  while (remaining.size > 0) {
+    let nearest = null;
+    let nearestDist = Infinity;
+    
+    for (const p of letterPixels) {
+      if (!remaining.has(p.id)) continue;
+      
+      const d = dist(current, p);
+      
+      // Check if this path crosses empty space
+      const crossesEmpty = lineIntersectsEmptySpace(current, p, letterPixels, letterIndex, 25);
+      
+      // Penalize paths that cross empty space
+      const effectiveDist = crossesEmpty ? d * 3 : d;
+      
+      if (effectiveDist < nearestDist) {
+        nearestDist = effectiveDist;
+        nearest = p;
+      }
+    }
+    
+    if (nearest) {
+      result.push(nearest);
+      remaining.delete(nearest.id);
+      current = nearest;
+    } else {
+      break;
+    }
+  }
+  
+  return result;
+}
+
 function getTypicalSpacing(pixels) {
   if (pixels.length < 2) return 15;
   let total = 0, count = 0;
