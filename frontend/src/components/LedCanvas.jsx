@@ -160,7 +160,7 @@ const LedCanvas = forwardRef(function LedCanvas({
     }
     ctx.restore();
 
-    // ── Guide paths ────────────────────────────────────────────────────────
+    // ── Guide paths (thin white outline) ────────────────────────────────────
     if (showGuideRef.current && guides.length) {
       ctx.save();
       for (const g of guides) {
@@ -173,12 +173,10 @@ const LedCanvas = forwardRef(function LedCanvas({
         ctx.closePath();
         ctx.fillStyle = GUIDE_FILL;
         ctx.fill();
+        // Thin white reference line
         ctx.strokeStyle = GUIDE_STROKE;
-        ctx.lineWidth = 3;
-        ctx.shadowColor = GUIDE_STROKE;
-        ctx.shadowBlur = 6;
+        ctx.lineWidth = 1.5;
         ctx.stroke();
-        ctx.shadowBlur = 0;
       }
       ctx.restore();
     }
