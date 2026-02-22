@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { MousePointer, Move, Zap, Layers, Settings, Copy, Trash2, Clipboard, Scissors, Unlink, Link, Undo2, Unplug } from 'lucide-react';
+import { MousePointer, Move, Zap, Layers, Settings, Copy, Trash2, Clipboard, Scissors, Unlink, Link, Undo2, Cable, CheckCircle, XCircle } from 'lucide-react';
 
 // Font size options in cm (30-300cm)
 const FONT_SIZE_OPTIONS = [
@@ -27,7 +27,9 @@ export default function ToolPanel({
   isBreakApart, onBreakApartToggle,
   clipboardCount, selectedCount, pixelCount,
   onUndo, canUndo,
-  onDisconnectLetterWiring, selectedLetterIndex, disconnectedAfter
+  selectedLetterIndex, approvedLetters,
+  onApproveLetterWiring, onUnapproveLetterWiring,
+  wireConnectStart
 }) {
 
   const loadFontFile = useCallback((file) => {
@@ -42,6 +44,8 @@ export default function ToolPanel({
     const file = e.dataTransfer.files[0];
     if (file && (file.name.endsWith('.ttf') || file.name.endsWith('.otf'))) loadFontFile(file);
   }, [loadFontFile]);
+
+  const isLetterApproved = selectedLetterIndex !== null && approvedLetters?.has(selectedLetterIndex);
 
   return (
     <div className="left-panel">
