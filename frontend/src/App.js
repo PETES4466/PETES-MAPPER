@@ -192,11 +192,12 @@ export default function App() {
     setClipboard(pixels.filter(p => selectedIds.has(p.id)));
   }, [pixels, selectedIds]);
 
-  // ── Paste (between selected pixels following wiring path) ────────────────
+  // ── Paste (between selected pixels - NO AUTO REWIRING) ────────────────────
+  // Respects user's manual wiring order, just inserts new pixels in between
   const handlePaste = useCallback(() => {
     if (selectedIds.size < 2) return;
     
-    // Get selected pixels in wiring order
+    // Get selected pixels in their current wiring order
     const selectedInOrder = wiringOrder
       .filter(id => selectedIds.has(id))
       .map(id => pixels.find(p => p.id === id))
@@ -204,25 +205,24 @@ export default function App() {
     
     if (selectedInOrder.length < 2) return;
     
-    // Add one pixel between each consecutive pair
     let counter = Date.now();
     const newPixels = [];
+    const insertions = []; // Track where to insert in wiringOrder
     
     for (let i = 0; i < selectedInOrder.length - 1; i++) {
       const p1 = selectedInOrder[i];
       const p2 = selectedInOrder[i + 1];
       
-      // Calculate midpoint
       const midX = (p1.x + p2.x) / 2;
       const midY = (p1.y + p2.y) / 2;
       
       const newPx = {
         id: `px_paste_${counter++}`,
         x: midX, y: midY,
-        type: p1.type, // Same type as first pixel
+        type: p1.type,
         letter: p1.letter,
         letterIndex: p1.letterIndex,
-        portIndex: -1,
+        portIndex: p1.portIndex, // Inherit port from first pixel
         portPixelIndex: -1,
         borderOrder: -1,
         fillOrder: -1,
@@ -230,29 +230,45 @@ export default function App() {
         isFillFirst: false, isFillLast: false
       };
       newPixels.push(newPx);
+      
+      // Find position in wiringOrder after p1
+      const p1Idx = wiringOrder.indexOf(p1.id);
+      insertions.push({ afterIdx: p1Idx, pixelId: newPx.id });
     }
     
     if (newPixels.length === 0) return;
     
-    // Insert new pixels into the array and rewire
+    // Build new wiring order with insertions (maintain user's flow)
+    const newWiringOrder = [...wiringOrder];
+    // Insert in reverse order to maintain correct indices
+    insertions.reverse().forEach(({ afterIdx, pixelId }) => {
+      newWiringOrder.splice(afterIdx + 1, 0, pixelId);
+    });
+    
+    // Add new pixels to array and renumber based on position in wiring order
     const allPixels = [...pixels, ...newPixels];
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(allPixels, wiringDirection, edgeMarginMm);
-    setPixels(wiredPixels);
-    setWiringOrder(order);
+    const renumberedPixels = renumberPixelsInOrder(allPixels, newWiringOrder);
+    
+    setPixels(renumberedPixels);
+    setWiringOrder(newWiringOrder);
     setSelectedIds(new Set(newPixels.map(p => p.id)));
-    saveToHistory(wiredPixels, order);
-  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+    saveToHistory(renumberedPixels, newWiringOrder);
+  }, [selectedIds, wiringOrder, pixels, saveToHistory]);
 
-  // ── Delete ───────────────────────────────────────────────────────────────
+  // ── Delete (NO AUTO REWIRING - preserve user's flow) ──────────────────────
   const handleDelete = useCallback(() => {
     if (!selectedIds.size) return;
     const remaining = pixels.filter(p => !selectedIds.has(p.id));
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(remaining, wiringDirection, edgeMarginMm);
-    setPixels(wiredPixels);
-    setWiringOrder(order);
+    const remainingOrder = wiringOrder.filter(id => !selectedIds.has(id));
+    
+    // Renumber based on remaining order (user's flow preserved)
+    const renumberedPixels = renumberPixelsInOrder(remaining, remainingOrder);
+    
+    setPixels(renumberedPixels);
+    setWiringOrder(remainingOrder);
     setSelectedIds(new Set());
-    saveToHistory(wiredPixels, order);
-  }, [selectedIds, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+    saveToHistory(renumberedPixels, remainingOrder);
+  }, [selectedIds, pixels, wiringOrder, saveToHistory]);
 
   // ── Break Wire (disconnect selected pixel from next) ─────────────────────
   const handleBreakWire = useCallback(() => {
@@ -263,29 +279,18 @@ export default function App() {
     ));
   }, [selectedIds]);
 
-  // ── Join Wire (connect selected pixels, renumber) ────────────────────────
+  // ── Join Wire (just clears broken flag - NO AUTO REWIRING) ────────────────
   const handleJoinWire = useCallback(() => {
     if (selectedIds.size < 2) return;
     
-    // Get selected pixels and add connections between them
-    const selectedPixels = wiringOrder
-      .filter(id => selectedIds.has(id))
-      .map(id => pixels.find(p => p.id === id))
-      .filter(Boolean);
-    
-    if (selectedPixels.length < 2) return;
-    
-    // Clear broken wiring for selected pixels
+    // Just clear broken wiring for selected pixels - preserve user's order
     const updatedPixels = pixels.map(p => 
       selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p
     );
     
-    // Rewire to renumber
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(updatedPixels, wiringDirection, edgeMarginMm);
-    setPixels(wiredPixels);
-    setWiringOrder(order);
-    saveToHistory(wiredPixels, order);
-  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+    setPixels(updatedPixels);
+    saveToHistory(updatedPixels, wiringOrder);
+  }, [selectedIds, pixels, wiringOrder, saveToHistory]);
 
   // ── Wire Connect Tool ────────────────────────────────────────────────────
   const handleWireConnectClick = useCallback((pixelId) => {
