@@ -391,9 +391,36 @@ export default function LedCanvas({
         const px = livePixelRef.current[p.id]?.x ?? p.x;
         const py = livePixelRef.current[p.id]?.y ?? p.y;
         const { sx, sy } = toScreen(px, py);
-        ctx.fillStyle = (p.portIndex ?? 0) < 3 ? '#ffffff' : '#ffffff';
-        ctx.fillText(p.wiringOrder, sx, sy);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(order, sx, sy);
       }
+      ctx.restore();
+    }
+
+    // ── Manual wire connections (user-drawn lines) ──────────────────────────
+    const mWires = manualWiresRef.current || [];
+    if (mWires.length > 0) {
+      const pmap = buildMap(pixels);
+      ctx.save();
+      ctx.strokeStyle = WIRE_CONNECT_COLOR;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = WIRE_CONNECT_COLOR;
+      ctx.shadowBlur = 6;
+      
+      for (const wire of mWires) {
+        const fromP = pmap[wire.from];
+        const toP = pmap[wire.to];
+        if (!fromP || !toP) continue;
+        
+        const { sx: fx, sy: fy } = toScreen(fromP.x, fromP.y);
+        const { sx: tx, sy: ty } = toScreen(toP.x, toP.y);
+        
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
       ctx.restore();
     }
 
@@ -414,18 +441,29 @@ export default function LedCanvas({
       ctx.restore();
     }
 
-    // ── Port nodes and connections ─────────────────────────────────────────
+    // ── Port nodes (only show visible ports) ─────────────────────────────────
     const ports = portNodesRef.current || [];
     const lpMap = letterPortMapRef.current || {};
-    const disconnected = disconnectedRef.current || new Set();
+    const visibleSet = visiblePortsRef.current || new Set();
     const selPortIdx = selPortIdxRef.current;
     
-    if (pixels.length > 0 && ports.length > 0) {
-      // Draw port-to-letter connection lines
+    if (pixels.length > 0 && visibleSet.size > 0) {
+      // Draw port-to-letter connection lines (for visible ports only)
       ctx.save();
-      for (const [letterIdxStr, portIdx] of Object.entries(lpMap)) {
+      for (const [key, portIdx] of Object.entries(lpMap)) {
+        if (!visibleSet.has(portIdx)) continue;
+        
+        // key is "letterIndex_type" e.g., "0_border"
+        const [letterIdxStr, pixelType] = key.split('_');
         const letterIdx = parseInt(letterIdxStr);
-        const startPixel = getLetterStartPixel(pixels, letterIdx);
+        
+        // Find start pixel based on type
+        let startPixel;
+        if (pixelType === 'border') {
+          startPixel = pixels.find(p => p.letterIndex === letterIdx && p.isBorderFirst);
+        } else {
+          startPixel = pixels.find(p => p.letterIndex === letterIdx && p.isFillFirst);
+        }
         if (!startPixel) continue;
         
         const port = ports.find(p => p.portIndex === portIdx);
