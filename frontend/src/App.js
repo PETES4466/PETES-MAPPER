@@ -302,13 +302,57 @@ export default function App() {
   // ── Context Menu (Right-click) ───────────────────────────────────────────
   const handleContextMenu = useCallback((e, pixelId) => {
     e.preventDefault();
+    const menuOptions = [];
+    
+    // Add Pixels option (requires 2+ selected)
     if (selectedIds.size >= 2) {
+      menuOptions.push({ type: 'addPixels' });
+    }
+    
+    // Connect Wire option (requires 2+ selected)
+    if (selectedIds.size >= 2) {
+      menuOptions.push({ type: 'connectWire' });
+    }
+    
+    // Disconnect Wire option (requires 1+ selected)
+    if (selectedIds.size >= 1) {
+      menuOptions.push({ type: 'disconnectWire' });
+    }
+    
+    if (menuOptions.length > 0) {
       setContextMenu({
         x: e.clientX,
         y: e.clientY,
-        type: 'addPixels'
+        options: menuOptions
       });
     }
+  }, [selectedIds]);
+
+  // ── Connect Wire (from context menu) ──────────────────────────────────────
+  const handleConnectWire = useCallback(() => {
+    if (selectedIds.size < 2) return;
+    
+    // Clear broken wiring for selected pixels and rewire
+    const updatedPixels = pixels.map(p => 
+      selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p
+    );
+    
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(updatedPixels, wiringDirection, edgeMarginMm);
+    setPixels(wiredPixels);
+    setWiringOrder(order);
+    saveToHistory(wiredPixels, order);
+    setContextMenu(null);
+  }, [selectedIds, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+
+  // ── Disconnect Wire (from context menu) ───────────────────────────────────
+  const handleDisconnectWire = useCallback(() => {
+    if (selectedIds.size < 1) return;
+    
+    // Mark selected pixels as having broken wiring
+    setPixels(prev => prev.map(p => 
+      selectedIds.has(p.id) ? { ...p, wiringBroken: true } : p
+    ));
+    setContextMenu(null);
   }, [selectedIds]);
 
   // ── Add Multiple Pixels (from context menu) ──────────────────────────────
