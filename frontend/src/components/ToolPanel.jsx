@@ -180,17 +180,29 @@ export default function ToolPanel({
           {[
             { id: 'select', icon: <MousePointer size={13}/>, label: 'Select / Drag' },
             { id: 'pan',    icon: <Move size={13}/>,         label: 'Pan canvas' },
-            { id: 'wire',   icon: <Zap size={13}/>,          label: 'Click-wire' },
+            { id: 'wire',   icon: <Zap size={13}/>,          label: 'Click-wire sequence' },
+            { id: 'wireconnect', icon: <Cable size={13}/>,   label: 'Wire Connect (draw line between 2 pixels)' },
           ].map(t => (
             <button key={t.id}
               className={`btn btn-icon ${activeTool === t.id ? 'active' : ''}`}
-              style={{ flex: 1, width: 'auto' }}
+              style={{ flex: 1, width: 'auto', position: 'relative' }}
               onClick={() => onToolChange(t.id)} title={t.label}
               data-testid={`tool-${t.id}`}>
               {t.icon}
+              {t.id === 'wireconnect' && wireConnectStart && (
+                <span style={{ position: 'absolute', top: -4, right: -4, width: 8, height: 8, 
+                  background: 'var(--warning)', borderRadius: '50%' }} />
+              )}
             </button>
           ))}
         </div>
+
+        {/* Wire Connect hint */}
+        {activeTool === 'wireconnect' && (
+          <div className="tooltip-hint" style={{ marginBottom: 6, color: 'var(--warning)' }}>
+            {wireConnectStart ? 'Click second pixel to complete wire' : 'Click first pixel to start wire'}
+          </div>
+        )}
 
         {/* Undo button */}
         <button className="btn btn-secondary btn-full" style={{ fontSize: 11, padding: '6px 8px', marginBottom: 6 }}
