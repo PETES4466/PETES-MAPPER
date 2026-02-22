@@ -616,14 +616,17 @@ export default function App() {
 }
 
 // Context Menu Component
-function ContextMenuPopup({ x, y, onAddPixels, onClose }) {
+function ContextMenuPopup({ x, y, options, onAddPixels, onConnectWire, onDisconnectWire, onClose }) {
   const [count, setCount] = useState(1);
+  const [showAddInput, setShowAddInput] = useState(false);
   
-  const handleSubmit = (e) => {
+  const handleAddPixels = (e) => {
     e.preventDefault();
     e.stopPropagation();
     onAddPixels(count);
   };
+
+  const hasOption = (type) => options.some(opt => opt.type === type);
 
   return (
     <div 
@@ -631,18 +634,53 @@ function ContextMenuPopup({ x, y, onAddPixels, onClose }) {
       style={{ left: x, top: y }}
       onClick={e => e.stopPropagation()}
     >
-      <form onSubmit={handleSubmit} className="context-menu-input">
-        <label>Add pixels:</label>
-        <input
-          type="number"
-          min="1"
-          max="100"
-          value={count}
-          onChange={(e) => setCount(Number(e.target.value))}
-          autoFocus
-        />
-        <button type="submit">Add</button>
-      </form>
+      {hasOption('addPixels') && !showAddInput && (
+        <button 
+          className="context-menu-item"
+          onClick={() => setShowAddInput(true)}
+          data-testid="ctx-add-pixels"
+        >
+          <span className="ctx-icon">+</span>
+          Add Pixels Between...
+        </button>
+      )}
+      
+      {showAddInput && (
+        <form onSubmit={handleAddPixels} className="context-menu-input">
+          <label>Count:</label>
+          <input
+            type="number"
+            min="1"
+            max="100"
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+            autoFocus
+          />
+          <button type="submit">Add</button>
+        </form>
+      )}
+      
+      {hasOption('connectWire') && (
+        <button 
+          className="context-menu-item"
+          onClick={onConnectWire}
+          data-testid="ctx-connect-wire"
+        >
+          <span className="ctx-icon">⎯</span>
+          Connect Wire
+        </button>
+      )}
+      
+      {hasOption('disconnectWire') && (
+        <button 
+          className="context-menu-item"
+          onClick={onDisconnectWire}
+          data-testid="ctx-disconnect-wire"
+        >
+          <span className="ctx-icon">✂</span>
+          Disconnect Wire
+        </button>
+      )}
     </div>
   );
 }
