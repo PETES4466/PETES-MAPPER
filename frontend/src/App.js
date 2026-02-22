@@ -604,7 +604,10 @@ export default function App() {
         <ContextMenuPopup
           x={contextMenu.x}
           y={contextMenu.y}
+          options={contextMenu.options || [{ type: 'addPixels' }]}
           onAddPixels={handleAddMultiplePixels}
+          onConnectWire={handleConnectWire}
+          onDisconnectWire={handleDisconnectWire}
           onClose={() => setContextMenu(null)}
         />
       )}
