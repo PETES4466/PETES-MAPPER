@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useCallback, forwardRef } from 'react';
 import { PORT_COLORS, BORDER_COLOR, FILL_COLOR } from '../utils/wireUtils';
 
-const WIRING_COLOR = 'rgba(30,144,255,0.8)';  // Blue wiring
+const WIRING_COLOR = 'rgba(255,77,77,0.8)';  // Red dotted for smart wiring recommendation
 const PENDING_COLOR = 'rgba(0,212,255,0.9)';
-const GUIDE_FILL = 'rgba(15,40,100,0.35)';
-const GUIDE_STROKE = '#1E7FFF';
+const GUIDE_FILL = 'rgba(15,40,100,0.08)';  // Very subtle fill
+const GUIDE_STROKE = 'rgba(255,255,255,0.7)';  // Thin white outline
 const PORT_NODE_SIZE = 18;
 const WIRE_CONNECT_COLOR = '#FFD700';
 
