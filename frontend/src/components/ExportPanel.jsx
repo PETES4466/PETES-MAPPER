@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { Download, RotateCcw, CheckCircle, AlertTriangle, Plug } from 'lucide-react';
-import { PORT_COLORS, getPortStats, PORT_PIXEL_LIMIT } from '../utils/wireUtils';
+import { Download, RotateCcw, CheckCircle, AlertTriangle, Plug, Eye, EyeOff } from 'lucide-react';
+import { PORT_COLORS, getPortStats, PORT_PIXEL_LIMIT, BORDER_COLOR, FILL_COLOR } from '../utils/wireUtils';
 
 const WIRE_DIRECTIONS = [
   { id: 'ltr-ttb', label: 'Left→Right, Top→Bottom' },
@@ -15,7 +15,7 @@ export default function ExportPanel({
   wiringDirection, onWiringDirectionChange,
   onReWire, onApplyWire, onClearWire,
   exportFormat, onExportFormatChange, onExport,
-  portNodes, letterPortMap, selectedPortIndex, onSelectPort, text
+  portNodes, letterPortMap, visiblePorts, selectedPortIndex, onSelectPort, text
 }) {
   const portStats = useMemo(() => getPortStats(pixels), [pixels]);
   const fillPixels   = pixels.filter(p => p.type === 'fill').length;
@@ -37,15 +37,11 @@ export default function ExportPanel({
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--muted)' }}>Border</span>
-            <span style={{ color: '#00d4ff' }} data-testid="border-pixel-count">{borderPixels}</span>
+            <span style={{ color: BORDER_COLOR }} data-testid="border-pixel-count">{borderPixels}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--muted)' }}>Fill</span>
-            <span style={{ color: '#00ff88' }} data-testid="fill-pixel-count">{fillPixels}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--muted)' }}>Manual</span>
-            <span style={{ color: '#ff9f43' }}>{manualPixels}</span>
+            <span style={{ color: FILL_COLOR }} data-testid="fill-pixel-count">{fillPixels}</span>
           </div>
         </div>
         {overflowWarning && (
