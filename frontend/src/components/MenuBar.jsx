@@ -53,6 +53,9 @@ export default function MenuBar({
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setOpenMenu(null);
       }
+      if (portDropdownRef.current && !portDropdownRef.current.contains(e.target)) {
+        setShowPortDropdown(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
