@@ -486,38 +486,11 @@ export default function LedCanvas({
       }
       ctx.restore();
       
-      // Draw disconnection markers between letters
-      if (disconnected.size > 0) {
-        ctx.save();
-        for (const letterIdx of disconnected) {
-          const endPixel = pixels.find(p => p.letterIndex === letterIdx && p.isLast);
-          const nextLetterIdx = letterIdx + 1;
-          const nextStartPixel = pixels.find(p => p.letterIndex === nextLetterIdx && p.isFirst);
-          
-          if (endPixel && nextStartPixel) {
-            const { sx: ex, sy: ey } = toScreen(endPixel.x, endPixel.y);
-            const { sx: nx, sy: ny } = toScreen(nextStartPixel.x, nextStartPixel.y);
-            
-            // Draw disconnection X mark in the middle
-            const mx = (ex + nx) / 2;
-            const my = (ey + ny) / 2;
-            
-            ctx.strokeStyle = DISCONNECTED_COLOR;
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(mx - 8, my - 8);
-            ctx.lineTo(mx + 8, my + 8);
-            ctx.moveTo(mx + 8, my - 8);
-            ctx.lineTo(mx - 8, my + 8);
-            ctx.stroke();
-          }
-        }
-        ctx.restore();
-      }
-      
-      // Draw port nodes
+      // Draw port nodes (only visible ports)
       ctx.save();
       for (const port of ports) {
+        if (!visibleSet.has(port.portIndex)) continue;
+        
         const portX = livePortRef.current[port.portIndex]?.x ?? port.x;
         const portY = livePortRef.current[port.portIndex]?.y ?? port.y;
         const { sx, sy } = toScreen(portX, portY);
