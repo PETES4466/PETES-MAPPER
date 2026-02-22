@@ -759,9 +759,11 @@ export default function LedCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
     if (toolRef.current === 'pan') { canvas.style.cursor = 'grab'; return; }
-    if (toolRef.current === 'wire') { canvas.style.cursor = 'crosshair'; return; }
+    if (toolRef.current === 'wire' || toolRef.current === 'wireconnect') { canvas.style.cursor = 'crosshair'; return; }
     // Check for port hover
-    if (hitPortNode(mx, my)) { canvas.style.cursor = 'grab'; return; }
+    const visibleSet = visiblePortsRef.current || new Set();
+    const portHit = hitPortNode(mx, my);
+    if (portHit && visibleSet.has(portHit.portIndex)) { canvas.style.cursor = 'grab'; return; }
     canvas.style.cursor = hitPixel(mx, my) ? 'grab' : 'default';
   };
 
