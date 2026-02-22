@@ -181,13 +181,14 @@ const LedCanvas = forwardRef(function LedCanvas({
       ctx.restore();
     }
 
-    // ── Wiring ─────────────────────────────────────────────────────────────
+    // ── Wiring (dotted red lines for smart wiring recommendation) ────────────
     if (showWireRef.current && pixels.length > 1) {
       const wOrder = wiringRef.current;
       const pmap = buildMap(pixels);
       ctx.save();
       ctx.strokeStyle = WIRING_COLOR;
       ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]); // Dotted line pattern
       ctx.beginPath();
       let prevBroken = false;
       wOrder.forEach((id, i) => {
@@ -201,6 +202,7 @@ const LedCanvas = forwardRef(function LedCanvas({
         prevBroken = p.wiringBroken ?? false;
       });
       ctx.stroke();
+      ctx.setLineDash([]); // Reset dash
       ctx.restore();
     }
 
