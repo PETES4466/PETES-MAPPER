@@ -450,6 +450,9 @@ export default function App() {
         canGenerate={canGenerate}
         onGenerate={handleGenerate}
         isGenerating={isGenerating}
+        activePort={activePort}
+        onActivePortChange={handleActivePortChange}
+        portStats={portStats}
       />
 
       {/* Main Content */}
