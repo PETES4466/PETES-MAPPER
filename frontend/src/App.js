@@ -52,6 +52,7 @@ export default function App() {
   const [letterPortMap, setLetterPortMap] = useState({});
   const [visiblePorts, setVisiblePorts] = useState(new Set());
   const [selectedPortIndex, setSelectedPortIndex] = useState(null);
+  const [activePort, setActivePort] = useState(0); // Currently active port in dropdown
 
   // ── Wire Connect Tool ────────────────────────────────────────────────────
   const [wireConnectStart, setWireConnectStart] = useState(null);
