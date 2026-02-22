@@ -453,9 +453,23 @@ export default function App() {
   }, []);
 
   // ── Connect Port to Letter ───────────────────────────────────────────────
+  // Actually assigns the port to all pixels of that letter/type
   const handleConnectPortToLetter = useCallback((portIndex, letterIndex, pixelType) => {
     const key = `${letterIndex}_${pixelType}`;
     setLetterPortMap(prev => ({ ...prev, [key]: portIndex }));
+    
+    // Update all pixels of this letter/type to have this portIndex
+    setPixels(prev => {
+      let portPixelCounter = 0;
+      return prev.map(p => {
+        if ((p.letterIndex ?? 0) === letterIndex && p.type === pixelType) {
+          portPixelCounter++;
+          return { ...p, portIndex: portIndex, portPixelIndex: portPixelCounter };
+        }
+        return p;
+      });
+    });
+    
     setSelectedPortIndex(null);
   }, []);
 
