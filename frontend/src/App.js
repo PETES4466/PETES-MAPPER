@@ -1,133 +1,128 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import './App.css';
-import ToolPanel from './components/ToolPanel';
+import MenuBar from './components/MenuBar';
+import Toolbar from './components/Toolbar';
+import PropertiesPanel from './components/PropertiesPanel';
 import LedCanvas from './components/LedCanvas';
-import ExportPanel from './components/ExportPanel';
+import PortsPanel from './components/PortsPanel';
+import StatusPanel from './components/StatusPanel';
 import { parseFont, getGlyphPathMm, getAdvanceWidth } from './utils/fontParser';
 import { generatePixelsForText, buildPixelObjects } from './utils/pixelUtils';
-import { autoSnakeWiringPerLetter, assignPortsWithLetterMap, computeLetterZoom, buildInitialPortNodes } from './utils/wireUtils';
+import { autoSnakeWiringPerLetter, getPortStats, buildInitialPortNodes } from './utils/wireUtils';
 import { generateDXF, generateCJB, downloadFile } from './utils/exportUtils';
 
-// Maximum undo history steps
 const MAX_HISTORY = 10;
 
 export default function App() {
   // ── Font & Text ──────────────────────────────────────────────────────────
-  const [font, setFont]           = useState(null);
-  const [fontName, setFontName]   = useState('');
-  const [text, setText]           = useState('HELLO');
-  const [fontSizeCm, setFontSizeCm] = useState(100);     // in cm (=mm*10)
-  const [letterSpacingCm, setLetterSpacingCm] = useState(0.5); // in cm
+  const [font, setFont] = useState(null);
+  const [fontName, setFontName] = useState('');
+  const [text, setText] = useState('HELLO');
+  const [fontSizeCm, setFontSizeCm] = useState(100);
+  const [letterSpacingCm, setLetterSpacingCm] = useState(0.5);
 
   // ── Mode & Spacing ───────────────────────────────────────────────────────
-  const [mode, setMode]                         = useState('both');
-  const [fillSpacingMm, setFillSpacingMm]       = useState(15);
-  const [borderSpacingMm, setBorderSpacingMm]   = useState(12);
+  const [mode, setMode] = useState('both');
+  const [fillSpacingMm, setFillSpacingMm] = useState(15);
+  const [borderSpacingMm, setBorderSpacingMm] = useState(12);
   const [borderPixelCount, setBorderPixelCount] = useState('auto');
-  const [pixelOdMm, setPixelOdMm]               = useState(12);
-  const [edgeMarginMm, setEdgeMarginMm]         = useState(3);
+  const [pixelOdMm, setPixelOdMm] = useState(12);
+  const [edgeMarginMm, setEdgeMarginMm] = useState(3);
 
   // ── Canvas Data ──────────────────────────────────────────────────────────
-  const [pixels, setPixels]               = useState([]);
+  const [pixels, setPixels] = useState([]);
   const [guideCommands, setGuideCommands] = useState([]);
-  const [wiringOrder, setWiringOrder]     = useState([]);
+  const [wiringOrder, setWiringOrder] = useState([]);
 
   // ── Wiring ───────────────────────────────────────────────────────────────
-  const [wiringMode, setWiringMode]           = useState('snake');
   const [wiringDirection, setWiringDirection] = useState('ltr-ttb');
-  const [pendingWire, setPendingWire]         = useState([]);
 
   // ── Tools & UI ───────────────────────────────────────────────────────────
-  const [activeTool, setActiveTool]     = useState('select');
-  const [selectedIds, setSelectedIds]   = useState(new Set());
-  const [clipboard, setClipboard]       = useState([]);
-  const [showNumbers, setShowNumbers]   = useState(true);
-  const [showWiring, setShowWiring]     = useState(true);
-  const [showGuide, setShowGuide]       = useState(true);
+  const [activeTool, setActiveTool] = useState('select');
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [clipboard, setClipboard] = useState([]);
+  const [showNumbers, setShowNumbers] = useState(true);
+  const [showWiring, setShowWiring] = useState(true);
+  const [showGuide, setShowGuide] = useState(true);
+  const [showPorts, setShowPorts] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // ── Break Apart ──────────────────────────────────────────────────────────
-  const [isBreakApart, setIsBreakApart]           = useState(false);
-  const [selectedLetterIndex, setSelectedLetterIndex] = useState(null);
-
-  // ── Export ───────────────────────────────────────────────────────────────
-  const [exportFormat, setExportFormat] = useState('dxf');
-
-  // ── Port Nodes (T8000 controller ports) ──────────────────────────────────
+  // ── Port Nodes ───────────────────────────────────────────────────────────
   const [portNodes, setPortNodes] = useState(buildInitialPortNodes());
-  const [letterPortMap, setLetterPortMap] = useState({}); // { letterIndex: portIndex }
-  const [selectedPortIndex, setSelectedPortIndex] = useState(null); // Currently selected port for connection
-  const [visiblePorts, setVisiblePorts] = useState(new Set()); // Which ports are visible on canvas
+  const [letterPortMap, setLetterPortMap] = useState({});
+  const [visiblePorts, setVisiblePorts] = useState(new Set());
+  const [selectedPortIndex, setSelectedPortIndex] = useState(null);
 
-  // ── Letter Wiring Approval (per-letter two-stage wiring) ─────────────────
-  const [approvedLetters, setApprovedLetters] = useState(new Set()); // Set<letterIndex> - letters with approved wiring
-
-  // ── Wire Connect Tool State ──────────────────────────────────────────────
-  const [wireConnectStart, setWireConnectStart] = useState(null); // First pixel in wire connect
-
-  // ── Manual Wire Connections (user-drawn lines between pixels) ────────────
-  const [manualWires, setManualWires] = useState([]); // Array of { from: pixelId, to: pixelId }
+  // ── Wire Connect Tool ────────────────────────────────────────────────────
+  const [wireConnectStart, setWireConnectStart] = useState(null);
+  const [manualWires, setManualWires] = useState([]);
 
   // ── Undo History ─────────────────────────────────────────────────────────
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  // ── Right-click Escape State ─────────────────────────────────────────────
-  const [lastAction, setLastAction] = useState(null); // Track last action for escape
+  // ── Context Menu ─────────────────────────────────────────────────────────
+  const [contextMenu, setContextMenu] = useState(null);
 
-  // Canvas zoom ref (to allow App to trigger zoom)
-  const canvasZoomRef = useRef(null);
+  // ── Panel States ─────────────────────────────────────────────────────────
+  const [propertiesCollapsed, setPropertiesCollapsed] = useState(false);
+  const [portsCollapsed, setPortsCollapsed] = useState(false);
 
-  // Convert cm → mm for internal use
-  const fontSizeMm     = fontSizeCm * 10;
+  // ── Export ───────────────────────────────────────────────────────────────
+  const [exportFormat, setExportFormat] = useState('dxf');
+
+  const canvasRef = useRef(null);
+
+  // Convert cm → mm
+  const fontSizeMm = fontSizeCm * 10;
   const letterSpacingMm = letterSpacingCm * 10;
 
-  // ── Save state to history ────────────────────────────────────────────────
-  const saveToHistory = useCallback((newPixels, newWiringOrder, newPortNodes, newLetterPortMap, newApprovedLetters, newManualWires) => {
+  // Computed values
+  const portStats = useMemo(() => getPortStats(pixels), [pixels]);
+  const selectedCount = selectedIds.size;
+  const canCopy = selectedCount > 0;
+  const canPaste = selectedCount >= 2; // Need 2+ pixels to paste between
+  const canDelete = selectedCount > 0;
+  const canBreakWire = selectedCount === 1;
+  const canJoinWire = selectedCount >= 2;
+  const canGenerate = font && text.trim().length > 0;
+
+  // ── Save to History ──────────────────────────────────────────────────────
+  const saveToHistory = useCallback((newPixels, newWiringOrder) => {
     const snapshot = {
       pixels: JSON.parse(JSON.stringify(newPixels)),
       wiringOrder: [...newWiringOrder],
-      portNodes: JSON.parse(JSON.stringify(newPortNodes)),
-      letterPortMap: { ...newLetterPortMap },
-      approvedLetters: new Set(newApprovedLetters || []),
-      manualWires: [...(newManualWires || [])],
       selectedIds: new Set()
     };
-    
     setHistory(prev => {
       const newHistory = prev.slice(0, historyIndex + 1);
       newHistory.push(snapshot);
-      if (newHistory.length > MAX_HISTORY) {
-        newHistory.shift();
-        return newHistory;
-      }
+      if (newHistory.length > MAX_HISTORY) newHistory.shift();
       return newHistory;
     });
     setHistoryIndex(prev => Math.min(prev + 1, MAX_HISTORY - 1));
   }, [historyIndex]);
 
-  // ── Undo function ────────────────────────────────────────────────────────
+  // ── Undo ─────────────────────────────────────────────────────────────────
   const handleUndo = useCallback(() => {
-    if (historyIndex <= 0 || history.length === 0) return;
-    
+    if (historyIndex <= 0) return;
     const newIndex = historyIndex - 1;
     const snapshot = history[newIndex];
     if (!snapshot) return;
-    
     setPixels(snapshot.pixels);
     setWiringOrder(snapshot.wiringOrder);
-    setPortNodes(snapshot.portNodes);
-    setLetterPortMap(snapshot.letterPortMap);
-    setApprovedLetters(snapshot.approvedLetters || new Set());
-    setManualWires(snapshot.manualWires || []);
-    setSelectedIds(snapshot.selectedIds);
+    setSelectedIds(new Set());
     setHistoryIndex(newIndex);
   }, [history, historyIndex]);
 
   // ── Font Load ────────────────────────────────────────────────────────────
   const handleFontLoad = useCallback((arrayBuffer, name) => {
-    try { setFont(parseFont(arrayBuffer)); setFontName(name); }
-    catch (e) { alert('Font parse error: ' + e.message); }
+    try {
+      setFont(parseFont(arrayBuffer));
+      setFontName(name);
+    } catch (e) {
+      alert('Font parse error: ' + e.message);
+    }
   }, []);
 
   // ── Generate ─────────────────────────────────────────────────────────────
@@ -137,7 +132,7 @@ export default function App() {
     try {
       await new Promise(r => setTimeout(r, 10));
       const settings = { fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm };
-      const raw  = generatePixelsForText(font, text, settings);
+      const raw = generatePixelsForText(font, text, settings);
       const base = buildPixelObjects(raw);
 
       // Build guide paths
@@ -150,29 +145,20 @@ export default function App() {
       }
       setGuideCommands(guides);
 
-      // Generate wiring per letter (border and fill separate, no auto-connection between letters)
       const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(base, wiringDirection, edgeMarginMm);
       setPixels(wiredPixels);
       setWiringOrder(order);
       setSelectedIds(new Set());
-      setPendingWire([]);
-      setSelectedLetterIndex(null);
-      setLastAction(null);
-      setApprovedLetters(new Set()); // Reset approvals
-      setManualWires([]); // Reset manual wires
-      setVisiblePorts(new Set()); // Hide all ports
-      
-      // Reset port nodes positions based on pixel bounds
-      const resetPorts = buildInitialPortNodes();
-      setPortNodes(resetPorts);
-      
-      // Save to history
-      saveToHistory(wiredPixels, order, resetPorts, letterPortMap, new Set(), []);
+      setManualWires([]);
+      setPortNodes(buildInitialPortNodes());
+      saveToHistory(wiredPixels, order);
     } catch (e) {
       console.error(e);
       alert('Generate error: ' + e.message);
-    } finally { setIsGenerating(false); }
-  }, [font, text, fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm, wiringDirection, letterPortMap, saveToHistory]);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [font, text, fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm, wiringDirection, saveToHistory]);
 
   // ── Re-Wire ──────────────────────────────────────────────────────────────
   const handleReWire = useCallback(() => {
@@ -180,332 +166,420 @@ export default function App() {
     const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(pixels, wiringDirection, edgeMarginMm);
     setPixels(wiredPixels);
     setWiringOrder(order);
-    saveToHistory(wiredPixels, order, portNodes, letterPortMap, approvedLetters, manualWires);
-  }, [pixels, wiringDirection, edgeMarginMm, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
+    saveToHistory(wiredPixels, order);
+  }, [pixels, wiringDirection, edgeMarginMm, saveToHistory]);
 
-  // ── Apply pending click-wire ──────────────────────────────────────────────
-  const handleApplyWire = useCallback(() => {
-    if (pendingWire.length < 2) return;
-    const manualSet = new Set(pendingWire);
-    const rest      = pixels.filter(p => !manualSet.has(p.id));
-    const { wiredPixels: autoWired } = autoSnakeWiringPerLetter(rest, wiringDirection, edgeMarginMm);
-    const fullOrder = [...pendingWire, ...autoWired.map(p => p.id)];
-    const updated   = pixels.map(p => ({ ...p, isAuto: !manualSet.has(p.id) }));
-    setPixels(updated);
-    setWiringOrder(fullOrder);
-    setPendingWire([]);
-    saveToHistory(updated, fullOrder, portNodes, letterPortMap, approvedLetters, manualWires);
-  }, [pendingWire, pixels, wiringDirection, edgeMarginMm, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
-
-  // ── Pixel move ────────────────────────────────────────────────────────────
-  const handlePixelMove = useCallback((id, newX, newY) => {
-    setPixels(prev => prev.map(p => p.id === id ? { ...p, x: newX, y: newY, isAuto: false } : p));
-    setLastAction({ type: 'move', id, x: newX, y: newY });
-  }, []);
-
-  // ── Pixel select ──────────────────────────────────────────────────────────
+  // ── Pixel Select ─────────────────────────────────────────────────────────
   const handlePixelSelect = useCallback((ids, multi = false) => {
     setSelectedIds(prev => {
       const next = multi ? new Set(prev) : new Set();
-      for (const id of ids) { if (next.has(id)) next.delete(id); else next.add(id); }
+      for (const id of ids) {
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+      }
       return next;
     });
   }, []);
 
-  // ── Break-apart letter select ─────────────────────────────────────────────
-  const handleLetterSelect = useCallback((letterIndex) => {
-    setSelectedLetterIndex(prev => prev === letterIndex ? null : letterIndex);
-    // Trigger canvas zoom to this letter
-    if (canvasZoomRef.current) {
-      canvasZoomRef.current(letterIndex);
+  // ── Pixel Move ───────────────────────────────────────────────────────────
+  const handlePixelMove = useCallback((id, newX, newY) => {
+    setPixels(prev => prev.map(p => p.id === id ? { ...p, x: newX, y: newY } : p));
+  }, []);
+
+  // ── Copy ─────────────────────────────────────────────────────────────────
+  const handleCopy = useCallback(() => {
+    setClipboard(pixels.filter(p => selectedIds.has(p.id)));
+  }, [pixels, selectedIds]);
+
+  // ── Paste (between selected pixels following wiring path) ────────────────
+  const handlePaste = useCallback(() => {
+    if (selectedIds.size < 2) return;
+    
+    // Get selected pixels in wiring order
+    const selectedInOrder = wiringOrder
+      .filter(id => selectedIds.has(id))
+      .map(id => pixels.find(p => p.id === id))
+      .filter(Boolean);
+    
+    if (selectedInOrder.length < 2) return;
+    
+    // Add one pixel between each consecutive pair
+    let counter = Date.now();
+    const newPixels = [];
+    
+    for (let i = 0; i < selectedInOrder.length - 1; i++) {
+      const p1 = selectedInOrder[i];
+      const p2 = selectedInOrder[i + 1];
+      
+      // Calculate midpoint
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+      
+      const newPx = {
+        id: `px_paste_${counter++}`,
+        x: midX, y: midY,
+        type: p1.type, // Same type as first pixel
+        letter: p1.letter,
+        letterIndex: p1.letterIndex,
+        portIndex: -1,
+        portPixelIndex: -1,
+        borderOrder: -1,
+        fillOrder: -1,
+        isBorderFirst: false, isBorderLast: false,
+        isFillFirst: false, isFillLast: false
+      };
+      newPixels.push(newPx);
     }
-  }, []);
+    
+    if (newPixels.length === 0) return;
+    
+    // Insert new pixels into the array and rewire
+    const allPixels = [...pixels, ...newPixels];
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(allPixels, wiringDirection, edgeMarginMm);
+    setPixels(wiredPixels);
+    setWiringOrder(order);
+    setSelectedIds(new Set(newPixels.map(p => p.id)));
+    saveToHistory(wiredPixels, order);
+  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
 
-  // ── Wire click ────────────────────────────────────────────────────────────
-  const handleWireClick = useCallback((pixelId) => {
-    setPendingWire(prev => prev.includes(pixelId) ? prev : [...prev, pixelId]);
-    setLastAction({ type: 'wire', pixelId });
-  }, []);
+  // ── Delete ───────────────────────────────────────────────────────────────
+  const handleDelete = useCallback(() => {
+    if (!selectedIds.size) return;
+    const remaining = pixels.filter(p => !selectedIds.has(p.id));
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(remaining, wiringDirection, edgeMarginMm);
+    setPixels(wiredPixels);
+    setWiringOrder(order);
+    setSelectedIds(new Set());
+    saveToHistory(wiredPixels, order);
+  }, [selectedIds, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
 
-  // ── Wire Connect Tool - connect two pixels with a line ────────────────────
+  // ── Break Wire (disconnect selected pixel from next) ─────────────────────
+  const handleBreakWire = useCallback(() => {
+    if (selectedIds.size !== 1) return;
+    const selectedId = [...selectedIds][0];
+    setPixels(prev => prev.map(p => 
+      p.id === selectedId ? { ...p, wiringBroken: true } : p
+    ));
+  }, [selectedIds]);
+
+  // ── Join Wire (connect selected pixels, renumber) ────────────────────────
+  const handleJoinWire = useCallback(() => {
+    if (selectedIds.size < 2) return;
+    
+    // Get selected pixels and add connections between them
+    const selectedPixels = wiringOrder
+      .filter(id => selectedIds.has(id))
+      .map(id => pixels.find(p => p.id === id))
+      .filter(Boolean);
+    
+    if (selectedPixels.length < 2) return;
+    
+    // Clear broken wiring for selected pixels
+    const updatedPixels = pixels.map(p => 
+      selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p
+    );
+    
+    // Rewire to renumber
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(updatedPixels, wiringDirection, edgeMarginMm);
+    setPixels(wiredPixels);
+    setWiringOrder(order);
+    saveToHistory(wiredPixels, order);
+  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+
+  // ── Wire Connect Tool ────────────────────────────────────────────────────
   const handleWireConnectClick = useCallback((pixelId) => {
     if (wireConnectStart === null) {
-      // First click - set start pixel
       setWireConnectStart(pixelId);
     } else {
-      // Second click - create wire connection
       if (wireConnectStart !== pixelId) {
-        const newWire = { from: wireConnectStart, to: pixelId };
-        const newWires = [...manualWires, newWire];
-        setManualWires(newWires);
-        saveToHistory(pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, newWires);
+        setManualWires(prev => [...prev, { from: wireConnectStart, to: pixelId }]);
       }
       setWireConnectStart(null);
     }
-  }, [wireConnectStart, manualWires, pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, saveToHistory]);
+  }, [wireConnectStart]);
 
-  // ── Break wiring ──────────────────────────────────────────────────────────
-  const handleBreakWiring = useCallback(() => {
-    if (!selectedIds.size) return;
-    const newPixels = pixels.map(p => selectedIds.has(p.id) ? { ...p, wiringBroken: true } : p);
-    setPixels(newPixels);
-    saveToHistory(newPixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires);
-  }, [selectedIds, pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
+  // ── Context Menu (Right-click) ───────────────────────────────────────────
+  const handleContextMenu = useCallback((e, pixelId) => {
+    e.preventDefault();
+    if (selectedIds.size >= 2) {
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        type: 'addPixels'
+      });
+    }
+  }, [selectedIds]);
 
-  // ── Restore wiring ────────────────────────────────────────────────────────
-  const handleRestoreWiring = useCallback(() => {
-    if (!selectedIds.size) return;
-    const newPixels = pixels.map(p => selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p);
-    setPixels(newPixels);
-    saveToHistory(newPixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires);
-  }, [selectedIds, pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
-
-  // ── Approve letter wiring (two-stage: draft -> approved) ──────────────────
-  const handleApproveLetterWiring = useCallback(() => {
-    if (selectedLetterIndex === null) return;
-    const newApproved = new Set(approvedLetters);
-    newApproved.add(selectedLetterIndex);
-    setApprovedLetters(newApproved);
-    saveToHistory(pixels, wiringOrder, portNodes, letterPortMap, newApproved, manualWires);
-  }, [selectedLetterIndex, approvedLetters, pixels, wiringOrder, portNodes, letterPortMap, manualWires, saveToHistory]);
-
-  // ── Unapprove letter wiring ───────────────────────────────────────────────
-  const handleUnapproveLetterWiring = useCallback(() => {
-    if (selectedLetterIndex === null) return;
-    const newApproved = new Set(approvedLetters);
-    newApproved.delete(selectedLetterIndex);
-    setApprovedLetters(newApproved);
-    saveToHistory(pixels, wiringOrder, portNodes, letterPortMap, newApproved, manualWires);
-  }, [selectedLetterIndex, approvedLetters, pixels, wiringOrder, portNodes, letterPortMap, manualWires, saveToHistory]);
-
-  // ── Add pixel at position ─────────────────────────────────────────────────
-  const handleAddPixel = useCallback((xMm, yMm) => {
+  // ── Add Multiple Pixels (from context menu) ──────────────────────────────
+  const handleAddMultiplePixels = useCallback((count) => {
+    if (selectedIds.size < 2 || count < 1) return;
+    
+    const selectedInOrder = wiringOrder
+      .filter(id => selectedIds.has(id))
+      .map(id => pixels.find(p => p.id === id))
+      .filter(Boolean);
+    
+    if (selectedInOrder.length < 2) return;
+    
     let counter = Date.now();
-    const newPx = {
-      id: `px_add_${counter++}`,
-      x: xMm, y: yMm,
-      type: 'fill',
-      letter: '?', letterIndex: 0,
-      portIndex: -1, portPixelIndex: -1,
-      borderOrder: -1, fillOrder: -1,
-      isBorderFirst: false, isBorderLast: false,
-      isFillFirst: false, isFillLast: false,
-      isAuto: false, wiringBroken: false, selected: false
-    };
-    const allPx = [...pixels, newPx];
-    const order = [...wiringOrder, newPx.id];
-    setPixels(allPx);
-    setWiringOrder(order);
-    setSelectedIds(new Set([newPx.id]));
-    setLastAction({ type: 'addPixel', id: newPx.id });
-    saveToHistory(allPx, order, portNodes, letterPortMap, approvedLetters, manualWires);
-  }, [pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
-
-  // ── Right-click escape (cancel last operation) ────────────────────────────
-  const handleEscape = useCallback(() => {
-    if (wireConnectStart !== null) {
-      // Cancel wire connect in progress
-      setWireConnectStart(null);
-      return;
-    }
-    if (lastAction) {
-      if (lastAction.type === 'addPixel') {
-        // Remove the last added pixel
-        const newPixels = pixels.filter(p => p.id !== lastAction.id);
-        const newOrder = wiringOrder.filter(id => id !== lastAction.id);
-        setPixels(newPixels);
-        setWiringOrder(newOrder);
-        setSelectedIds(new Set());
-      } else if (lastAction.type === 'wire') {
-        // Remove last pixel from pending wire
-        setPendingWire(prev => prev.slice(0, -1));
+    const newPixels = [];
+    
+    // Add 'count' pixels between each consecutive pair
+    for (let i = 0; i < selectedInOrder.length - 1; i++) {
+      const p1 = selectedInOrder[i];
+      const p2 = selectedInOrder[i + 1];
+      
+      for (let j = 1; j <= count; j++) {
+        const t = j / (count + 1);
+        const x = p1.x + (p2.x - p1.x) * t;
+        const y = p1.y + (p2.y - p1.y) * t;
+        
+        newPixels.push({
+          id: `px_add_${counter++}`,
+          x, y,
+          type: p1.type,
+          letter: p1.letter,
+          letterIndex: p1.letterIndex,
+          portIndex: -1,
+          portPixelIndex: -1,
+          borderOrder: -1,
+          fillOrder: -1,
+          isBorderFirst: false, isBorderLast: false,
+          isFillFirst: false, isFillLast: false
+        });
       }
-      setLastAction(null);
-    } else {
-      // Clear selection or pending operations
-      setSelectedIds(new Set());
-      setPendingWire([]);
-      setSelectedPortIndex(null);
     }
-  }, [lastAction, pixels, wiringOrder, wireConnectStart]);
+    
+    const allPixels = [...pixels, ...newPixels];
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(allPixels, wiringDirection, edgeMarginMm);
+    setPixels(wiredPixels);
+    setWiringOrder(order);
+    setSelectedIds(new Set(newPixels.map(p => p.id)));
+    saveToHistory(wiredPixels, order);
+    setContextMenu(null);
+  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
 
-  // ── Port node drag ────────────────────────────────────────────────────────
-  const handlePortNodeMove = useCallback((portIndex, newX, newY) => {
-    setPortNodes(prev => prev.map(p => 
-      p.portIndex === portIndex ? { ...p, x: newX, y: newY } : p
-    ));
-  }, []);
-
-  // ── Toggle port visibility ────────────────────────────────────────────────
-  const handleTogglePortVisibility = useCallback((portIndex) => {
+  // ── Port Selection ───────────────────────────────────────────────────────
+  const handleSelectPort = useCallback((portIndex) => {
     setVisiblePorts(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(portIndex)) {
-        newSet.delete(portIndex);
+      const next = new Set(prev);
+      if (next.has(portIndex)) {
+        next.delete(portIndex);
         setSelectedPortIndex(null);
       } else {
-        newSet.add(portIndex);
+        next.add(portIndex);
         setSelectedPortIndex(portIndex);
       }
-      return newSet;
+      return next;
     });
   }, []);
 
-  // ── Connect port to letter ────────────────────────────────────────────────
+  // ── Port Node Move ───────────────────────────────────────────────────────
+  const handlePortNodeMove = useCallback((portIndex, x, y) => {
+    setPortNodes(prev => prev.map(p => 
+      p.portIndex === portIndex ? { ...p, x, y } : p
+    ));
+  }, []);
+
+  // ── Connect Port to Letter ───────────────────────────────────────────────
   const handleConnectPortToLetter = useCallback((portIndex, letterIndex, pixelType) => {
-    // pixelType is 'border' or 'fill'
     const key = `${letterIndex}_${pixelType}`;
-    const newMap = { ...letterPortMap, [key]: portIndex };
-    setLetterPortMap(newMap);
-    
+    setLetterPortMap(prev => ({ ...prev, [key]: portIndex }));
     setSelectedPortIndex(null);
-    saveToHistory(pixels, wiringOrder, portNodes, newMap, approvedLetters, manualWires);
-  }, [letterPortMap, pixels, wiringOrder, portNodes, approvedLetters, manualWires, saveToHistory]);
+  }, []);
 
-  // ── Select port for connection ────────────────────────────────────────────
-  const handleSelectPort = useCallback((portIndex) => {
-    // Toggle port visibility and selection
-    handleTogglePortVisibility(portIndex);
-  }, [handleTogglePortVisibility]);
-
-  // ── Copy / Paste / Delete ─────────────────────────────────────────────────
-  const handleCopy   = useCallback(() => setClipboard(pixels.filter(p => selectedIds.has(p.id))), [pixels, selectedIds]);
-  const handlePaste  = useCallback(() => {
-    if (!clipboard.length) return;
-    let c = Date.now();
-    const newPx = clipboard.map(p => ({ ...p, id: `px_paste_${c++}`, x: p.x + 10, y: p.y + 10, isAuto: false }));
-    const all   = [...pixels, ...newPx];
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(all, wiringDirection, edgeMarginMm);
-    setPixels(wiredPixels);
-    setWiringOrder(order);
-    setSelectedIds(new Set(newPx.map(p => p.id)));
-    saveToHistory(wiredPixels, order, portNodes, letterPortMap, approvedLetters, manualWires);
-  }, [clipboard, pixels, wiringDirection, edgeMarginMm, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
-  
-  const handleDelete = useCallback(() => {
-    if (!selectedIds.size) return;
-    const rem = pixels.filter(p => !selectedIds.has(p.id));
-    const ord = wiringOrder.filter(id => !selectedIds.has(id));
-    setPixels(rem);
-    setWiringOrder(ord);
-    setSelectedIds(new Set());
-    saveToHistory(rem, ord, portNodes, letterPortMap, approvedLetters, manualWires);
-  }, [selectedIds, pixels, wiringOrder, portNodes, letterPortMap, approvedLetters, manualWires, saveToHistory]);
-
-  // ── Export ────────────────────────────────────────────────────────────────
+  // ── Export ───────────────────────────────────────────────────────────────
   const handleExport = useCallback(() => {
     if (!pixels.length) return;
     const s = { pixelOdMm, text, fontSizeMm };
     if (exportFormat === 'dxf') {
-      downloadFile(generateDXF(pixels, wiringOrder, s), `led_${text.replace(/\s+/g,'_')}.dxf`, 'application/dxf');
+      downloadFile(generateDXF(pixels, wiringOrder, s), `led_${text.replace(/\s+/g, '_')}.dxf`, 'application/dxf');
     } else {
-      downloadFile(generateCJB(pixels, wiringOrder, s), `led_${text.replace(/\s+/g,'_')}.cjb`, 'application/xml');
+      downloadFile(generateCJB(pixels, wiringOrder, s), `led_${text.replace(/\s+/g, '_')}.cjb`, 'application/xml');
     }
   }, [pixels, wiringOrder, exportFormat, pixelOdMm, text, fontSizeMm]);
 
+  // Close context menu on click outside
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
   return (
-    <div className="app-layout">
-      <ToolPanel
-        font={font} fontName={fontName} onFontLoad={handleFontLoad}
-        text={text} onTextChange={setText}
-        fontSizeCm={fontSizeCm} onFontSizeCmChange={setFontSizeCm}
-        letterSpacingCm={letterSpacingCm} onLetterSpacingCmChange={setLetterSpacingCm}
-        mode={mode} onModeChange={setMode}
-        fillSpacingMm={fillSpacingMm} onFillSpacingChange={setFillSpacingMm}
-        borderSpacingMm={borderSpacingMm} onBorderSpacingChange={setBorderSpacingMm}
-        borderPixelCount={borderPixelCount} onBorderPixelCountChange={setBorderPixelCount}
-        pixelOdMm={pixelOdMm} onPixelOdChange={setPixelOdMm}
-        edgeMarginMm={edgeMarginMm} onEdgeMarginChange={setEdgeMarginMm}
-        activeTool={activeTool} onToolChange={setActiveTool}
-        showNumbers={showNumbers} onShowNumbersChange={setShowNumbers}
-        showWiring={showWiring} onShowWiringChange={setShowWiring}
-        showGuide={showGuide} onShowGuideChange={setShowGuide}
-        isGenerating={isGenerating} onGenerate={handleGenerate}
-        onDelete={handleDelete} onCopy={handleCopy} onPaste={handlePaste}
-        onBreakWiring={handleBreakWiring} onRestoreWiring={handleRestoreWiring}
-        isBreakApart={isBreakApart} onBreakApartToggle={() => setIsBreakApart(v => !v)}
-        clipboardCount={clipboard.length} selectedCount={selectedIds.size}
-        pixelCount={pixels.length}
-        onUndo={handleUndo}
+    <div className="app-container" onClick={handleCloseContextMenu}>
+      {/* Menu Bar */}
+      <MenuBar
+        onLoadFont={handleFontLoad}
+        mode={mode}
+        onModeChange={setMode}
+        onExportDXF={() => { setExportFormat('dxf'); handleExport(); }}
+        onExportCJB={() => { setExportFormat('cjb'); handleExport(); }}
         canUndo={historyIndex > 0}
-        selectedLetterIndex={selectedLetterIndex}
-        approvedLetters={approvedLetters}
-        onApproveLetterWiring={handleApproveLetterWiring}
-        onUnapproveLetterWiring={handleUnapproveLetterWiring}
-        wireConnectStart={wireConnectStart}
+        onUndo={handleUndo}
+        canCopy={canCopy}
+        onCopy={handleCopy}
+        canPaste={canPaste}
+        onPaste={handlePaste}
+        canDelete={canDelete}
+        onDelete={handleDelete}
+        showGuide={showGuide}
+        onShowGuideChange={setShowGuide}
+        showWiring={showWiring}
+        onShowWiringChange={setShowWiring}
+        showNumbers={showNumbers}
+        onShowNumbersChange={setShowNumbers}
+        showPorts={showPorts}
+        onShowPortsChange={setShowPorts}
+        activeTool={activeTool}
+        onToolChange={setActiveTool}
+        fontName={fontName}
+        text={text}
+        onTextChange={setText}
+        canGenerate={canGenerate}
+        onGenerate={handleGenerate}
+        isGenerating={isGenerating}
       />
 
-      <div className="canvas-area">
-        <div className="canvas-toolbar">
-          <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-            Scroll=Zoom &nbsp;·&nbsp; Middle-drag/Pan=Move &nbsp;·&nbsp; Right-click=Add pixel (2nd click=Escape)
-          </span>
-          <span style={{ marginLeft: 'auto', fontSize: 11 }}>
-            {pixels.length > 0 && (
-              <span style={{ color: 'var(--muted)' }}>
-                <span style={{ color: 'var(--accent2)' }}>{pixels.length}</span> px &nbsp;·&nbsp;
-                Font: <span style={{ color: 'var(--accent)' }}>{fontSizeCm}cm</span> &nbsp;·&nbsp;
-                Margin: <span style={{ color: 'var(--accent)' }}>{edgeMarginMm}mm</span>
-              </span>
-            )}
-          </span>
+      {/* Main Content */}
+      <div className="main-content">
+        {/* Left Toolbar */}
+        <Toolbar
+          activeTool={activeTool}
+          onToolChange={setActiveTool}
+          canUndo={historyIndex > 0}
+          onUndo={handleUndo}
+          canCopy={canCopy}
+          onCopy={handleCopy}
+          canPaste={canPaste}
+          onPaste={handlePaste}
+          canDelete={canDelete}
+          onDelete={handleDelete}
+          canBreakWire={canBreakWire}
+          onBreakWire={handleBreakWire}
+          canJoinWire={canJoinWire}
+          onJoinWire={handleJoinWire}
+          onReWire={handleReWire}
+          wireConnectStart={wireConnectStart}
+        />
+
+        {/* Properties Panel */}
+        <PropertiesPanel
+          fontSizeCm={fontSizeCm}
+          onFontSizeCmChange={setFontSizeCm}
+          letterSpacingCm={letterSpacingCm}
+          onLetterSpacingCmChange={setLetterSpacingCm}
+          fillSpacingMm={fillSpacingMm}
+          onFillSpacingChange={setFillSpacingMm}
+          borderSpacingMm={borderSpacingMm}
+          onBorderSpacingChange={setBorderSpacingMm}
+          borderPixelCount={borderPixelCount}
+          onBorderPixelCountChange={setBorderPixelCount}
+          pixelOdMm={pixelOdMm}
+          onPixelOdChange={setPixelOdMm}
+          edgeMarginMm={edgeMarginMm}
+          onEdgeMarginChange={setEdgeMarginMm}
+          wiringDirection={wiringDirection}
+          onWiringDirectionChange={setWiringDirection}
+          isCollapsed={propertiesCollapsed}
+          onToggleCollapse={() => setPropertiesCollapsed(!propertiesCollapsed)}
+        />
+
+        {/* Canvas */}
+        <div className="canvas-wrapper">
+          <div className="canvas-container">
+            <LedCanvas
+              ref={canvasRef}
+              pixels={pixels}
+              wiringOrder={wiringOrder}
+              guideCommands={guideCommands}
+              selectedIds={selectedIds}
+              activeTool={activeTool}
+              pixelOdMm={pixelOdMm}
+              showNumbers={showNumbers}
+              showWiring={showWiring}
+              showGuide={showGuide}
+              onPixelMove={handlePixelMove}
+              onPixelSelect={handlePixelSelect}
+              onWireConnectClick={handleWireConnectClick}
+              onContextMenu={handleContextMenu}
+              wireConnectStart={wireConnectStart}
+              portNodes={portNodes}
+              onPortNodeMove={handlePortNodeMove}
+              letterPortMap={letterPortMap}
+              visiblePorts={visiblePorts}
+              selectedPortIndex={selectedPortIndex}
+              onConnectPortToLetter={handleConnectPortToLetter}
+              manualWires={manualWires}
+            />
+          </div>
         </div>
 
-        <LedCanvas
-          pixels={pixels} wiringOrder={wiringOrder} guideCommands={guideCommands}
-          selectedIds={selectedIds} activeTool={activeTool}
-          pixelOdMm={pixelOdMm}
-          showNumbers={showNumbers} showWiring={showWiring} showGuide={showGuide}
-          wiringMode={wiringMode} pendingWire={pendingWire}
-          isBreakApart={isBreakApart} selectedLetterIndex={selectedLetterIndex}
-          onPixelMove={handlePixelMove} onPixelSelect={handlePixelSelect}
-          onWireClick={handleWireClick} onLetterSelect={handleLetterSelect}
-          onAddPixel={handleAddPixel}
-          onEscape={handleEscape}
-          lastAction={lastAction}
-          zoomRef={canvasZoomRef}
+        {/* Ports Panel */}
+        <PortsPanel
+          pixels={pixels}
           portNodes={portNodes}
-          onPortNodeMove={handlePortNodeMove}
           letterPortMap={letterPortMap}
           visiblePorts={visiblePorts}
           selectedPortIndex={selectedPortIndex}
-          onConnectPortToLetter={handleConnectPortToLetter}
-          approvedLetters={approvedLetters}
-          manualWires={manualWires}
-          wireConnectStart={wireConnectStart}
-          onWireConnectClick={handleWireConnectClick}
+          onSelectPort={handleSelectPort}
+          text={text}
+          exportFormat={exportFormat}
+          onExportFormatChange={setExportFormat}
+          onExport={handleExport}
+          isCollapsed={portsCollapsed}
+          onToggleCollapse={() => setPortsCollapsed(!portsCollapsed)}
         />
-
-        <div className="canvas-statusbar">
-          <span>Selected: <span className="status-val">{selectedIds.size}</span></span>
-          <span>Border: <span className="status-val" style={{ color: '#00d4ff' }}>{pixels.filter(p=>p.type==='border').length}</span></span>
-          <span>Fill: <span className="status-val" style={{ color: '#6bcb77' }}>{pixels.filter(p=>p.type==='fill').length}</span></span>
-          <span>Approved: <span className="status-val" style={{ color: approvedLetters.size > 0 ? 'var(--success)' : 'inherit' }}>
-            {approvedLetters.size}/{new Set(pixels.map(p => p.letterIndex)).size}
-          </span></span>
-          {pendingWire.length > 0 && <span style={{ color: 'var(--accent)' }}>Wire chain: <span className="status-val">{pendingWire.length}</span></span>}
-          {wireConnectStart && <span style={{ color: 'var(--warning)' }}>Wire connect: click 2nd pixel</span>}
-          {isBreakApart && selectedLetterIndex !== null && (
-            <span style={{ color: 'var(--accent2)' }}>Letter: {text[selectedLetterIndex] || selectedLetterIndex}</span>
-          )}
-        </div>
       </div>
 
-      <ExportPanel
-        pixels={pixels} wiringOrder={wiringOrder} pendingWire={pendingWire}
-        wiringMode={wiringMode} onWiringModeChange={setWiringMode}
-        wiringDirection={wiringDirection} onWiringDirectionChange={setWiringDirection}
-        onReWire={handleReWire} onApplyWire={handleApplyWire}
-        onClearWire={() => setPendingWire([])}
-        exportFormat={exportFormat} onExportFormatChange={setExportFormat}
-        onExport={handleExport}
-        portNodes={portNodes}
-        letterPortMap={letterPortMap}
-        visiblePorts={visiblePorts}
-        selectedPortIndex={selectedPortIndex}
-        onSelectPort={handleSelectPort}
-        text={text}
+      {/* Status Panel */}
+      <StatusPanel
+        pixels={pixels}
+        selectedCount={selectedCount}
+        activeTool={activeTool}
+        wireConnectStart={wireConnectStart}
+        portStats={portStats}
       />
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenuPopup
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onAddPixels={handleAddMultiplePixels}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Context Menu Component
+function ContextMenuPopup({ x, y, onAddPixels, onClose }) {
+  const [count, setCount] = useState(1);
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onAddPixels(count);
+  };
+
+  return (
+    <div 
+      className="context-menu" 
+      style={{ left: x, top: y }}
+      onClick={e => e.stopPropagation()}
+    >
+      <form onSubmit={handleSubmit} className="context-menu-input">
+        <label>Add pixels:</label>
+        <input
+          type="number"
+          min="1"
+          max="100"
+          value={count}
+          onChange={(e) => setCount(Number(e.target.value))}
+          autoFocus
+        />
+        <button type="submit">Add</button>
+      </form>
     </div>
   );
 }
