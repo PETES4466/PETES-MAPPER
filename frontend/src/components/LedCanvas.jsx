@@ -661,9 +661,10 @@ export default function LedCanvas({
       return;
     }
 
-    // Check if clicking on a port node first
+    // Check if clicking on a port node first (only if visible)
+    const visibleSet = visiblePortsRef.current || new Set();
     const hitPort = hitPortNode(mx, my);
-    if (hitPort) {
+    if (hitPort && visibleSet.has(hitPort.portIndex)) {
       isDraggingPortRef.current = true;
       dragPortIdxRef.current = hitPort.portIndex;
       dragStartRef.current = { mx, my };
@@ -674,10 +675,21 @@ export default function LedCanvas({
     const selPort = selPortIdxRef.current;
     if (selPort !== null) {
       const hit = hitPixel(mx, my);
-      if (hit && hit.isFirst) {
-        onConnectPortToLetter?.(selPort, hit.letterIndex ?? 0);
+      if (hit && (hit.isBorderFirst || hit.isFillFirst)) {
+        const pixelType = hit.type; // 'border' or 'fill'
+        onConnectPortToLetter?.(selPort, hit.letterIndex ?? 0, pixelType);
         return;
       }
+    }
+
+    // Wire Connect tool
+    if (tool === 'wireconnect') {
+      const hit = hitPixel(mx, my);
+      if (hit) { 
+        onWireConnectClick?.(hit.id); 
+        render(); 
+      }
+      return;
     }
 
     if (tool === 'wire') {
