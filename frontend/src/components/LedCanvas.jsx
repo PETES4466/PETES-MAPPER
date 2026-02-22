@@ -230,25 +230,31 @@ export default function LedCanvas({
       ctx.restore();
     }
 
-    // ── Pixels ────────────────────────────────────────────────────────────
+    // ── Pixels (Border=cyan, Fill=green) ───────────────────────────────────
+    const approved = approvedRef.current || new Set();
+    
     for (const p of pixels) {
       const px = livePixelRef.current[p.id]?.x ?? p.x;
       const py = livePixelRef.current[p.id]?.y ?? p.y;
       const { sx, sy } = toScreen(px, py);
       const isSel     = selIds.has(p.id);
       const isPend    = pending.includes(p.id);
-      const portColor = PORT_COLORS[Math.max(0, Math.min(7, p.portIndex ?? 0))];
       const isBroken  = p.wiringBroken ?? false;
       const letterColor = LETTER_COLORS[(p.letterIndex ?? 0) % LETTER_COLORS.length];
       const isSelLetter = breakApart && selLetter !== null && p.letterIndex === selLetter;
+      
+      // Use different colors for border vs fill
+      const pixelBaseColor = p.type === 'border' ? BORDER_COLOR : FILL_COLOR;
+      const isWireConnectHighlight = wireConnectStartRef.current === p.id;
 
       ctx.save();
 
       // Glow effects
       if (isSel)           { ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 10; }
       else if (isPend)     { ctx.shadowColor = PENDING_COLOR; ctx.shadowBlur = 12; }
-      else if (p.isFirst)  { ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 12; }
-      else if (p.isLast)   { ctx.shadowColor = '#ff6b6b'; ctx.shadowBlur = 12; }
+      else if (isWireConnectHighlight) { ctx.shadowColor = WIRE_CONNECT_COLOR; ctx.shadowBlur = 14; }
+      else if (p.isBorderFirst || p.isFillFirst) { ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 12; }
+      else if (p.isBorderLast || p.isFillLast)   { ctx.shadowColor = '#ff6b6b'; ctx.shadowBlur = 12; }
       else if (isSelLetter){ ctx.shadowColor = letterColor; ctx.shadowBlur = 8; }
 
       // Main circle
@@ -256,14 +262,16 @@ export default function LedCanvas({
       ctx.arc(sx, sy, r, 0, Math.PI * 2);
       let fill = isSel ? 'rgba(255,255,255,0.85)'
                : isPend ? 'rgba(0,212,255,0.85)'
-               : portColor + 'cc';
+               : isWireConnectHighlight ? WIRE_CONNECT_COLOR + 'dd'
+               : pixelBaseColor + 'cc';
       if (isBroken) fill = 'rgba(80,20,20,0.8)';
       ctx.fillStyle = fill;
       ctx.fill();
 
       // Stroke ring
       ctx.strokeStyle = isSel ? '#ffffff' : isPend ? '#00d4ff'
-                      : isBroken ? '#ff6b6b' : p.isAuto ? portColor : '#ff9f43';
+                      : isWireConnectHighlight ? WIRE_CONNECT_COLOR
+                      : isBroken ? '#ff6b6b' : pixelBaseColor;
       ctx.lineWidth = isSel ? 2.5 : isBroken ? 2 : 1.5;
       ctx.stroke();
       ctx.shadowBlur = 0;
