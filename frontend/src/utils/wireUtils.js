@@ -282,6 +282,50 @@ export function autoSnakeWiringPerLetter(pixels, direction = 'ltr-ttb', minSpaci
   return { wiredPixels, wiringOrder };
 }
 
+// ── Renumber pixels based on user's wiring order (NO AUTO REWIRING) ───────────
+// This preserves user's manual flow and just updates the numbers
+export function renumberPixelsInOrder(pixels, wiringOrder) {
+  const pixelMap = {};
+  for (const p of pixels) pixelMap[p.id] = { ...p };
+  
+  // Group by letter and type
+  const letterGroups = {};
+  for (const id of wiringOrder) {
+    const p = pixelMap[id];
+    if (!p) continue;
+    const key = `${p.letterIndex ?? 0}_${p.type}`;
+    if (!letterGroups[key]) letterGroups[key] = [];
+    letterGroups[key].push(id);
+  }
+  
+  // Renumber each group
+  for (const [key, ids] of Object.entries(letterGroups)) {
+    const [, type] = key.split('_');
+    ids.forEach((id, idx) => {
+      const p = pixelMap[id];
+      if (!p) return;
+      
+      if (type === 'border') {
+        p.borderOrder = idx + 1;
+        p.fillOrder = -1;
+        p.isBorderFirst = idx === 0;
+        p.isBorderLast = idx === ids.length - 1;
+        p.isFillFirst = false;
+        p.isFillLast = false;
+      } else {
+        p.borderOrder = -1;
+        p.fillOrder = idx + 1;
+        p.isBorderFirst = false;
+        p.isBorderLast = false;
+        p.isFillFirst = idx === 0;
+        p.isFillLast = idx === ids.length - 1;
+      }
+    });
+  }
+  
+  return Object.values(pixelMap);
+}
+
 // ── Port assignment with letter-to-port mapping ───────────────────────────────
 // letterPortMap: { "letterIndex_type": portIndex } e.g., { "0_border": 0, "0_fill": 1 }
 export function assignPortsWithLetterMap(
