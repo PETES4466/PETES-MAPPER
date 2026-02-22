@@ -254,6 +254,114 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Port Dropdown (MenuBar)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.port-dropdown-container {
+  position: relative;
+}
+
+.port-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.port-dropdown-btn:hover {
+  border-color: var(--accent);
+}
+
+.port-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.port-label {
+  font-weight: 500;
+}
+
+.port-count-display {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.port-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  padding: 4px;
+  z-index: 1001;
+}
+
+.port-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.port-dropdown-item:hover {
+  background: var(--bg-hover);
+}
+
+.port-dropdown-item.active {
+  background: var(--bg-active);
+}
+
+.port-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.port-name {
+  font-weight: 500;
+  min-width: 24px;
+}
+
+.port-stats {
+  color: var(--text-muted);
+  font-size: 11px;
+  min-width: 60px;
+}
+
+.port-progress {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-dark);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.port-progress-fill {
+  height: 100%;
+  transition: width 0.2s;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Vertical Toolbar
    ═══════════════════════════════════════════════════════════════════════════ */
 
