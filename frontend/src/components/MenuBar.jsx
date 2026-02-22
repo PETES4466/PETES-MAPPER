@@ -184,6 +184,64 @@ export default function MenuBar({
 
       {/* Quick toolbar */}
       <div className="quick-toolbar">
+        {/* Port Dropdown */}
+        <div className="toolbar-group port-dropdown-container" ref={portDropdownRef}>
+          <button 
+            className="port-dropdown-btn"
+            onClick={() => setShowPortDropdown(!showPortDropdown)}
+            data-testid="port-dropdown-btn"
+          >
+            <span 
+              className="port-indicator" 
+              style={{ backgroundColor: activePort !== null ? PORT_COLORS[activePort] : 'var(--text-muted)' }}
+            />
+            <span className="port-label">
+              {activePort !== null ? `P${activePort + 1}` : 'Port'}
+            </span>
+            <span className="port-count-display">
+              ({portStats?.stats?.[activePort]?.count ?? 0}/{PORT_PIXEL_LIMIT})
+            </span>
+            <ChevronDown size={12} />
+          </button>
+          {showPortDropdown && (
+            <div className="port-dropdown-menu">
+              {Array.from({ length: 8 }, (_, i) => {
+                const count = portStats?.stats?.[i]?.count ?? 0;
+                const isActive = activePort === i;
+                return (
+                  <button
+                    key={i}
+                    className={`port-dropdown-item ${isActive ? 'active' : ''}`}
+                    onClick={() => {
+                      onActivePortChange?.(i);
+                      setShowPortDropdown(false);
+                    }}
+                    data-testid={`port-select-${i+1}`}
+                  >
+                    <span 
+                      className="port-color-dot" 
+                      style={{ backgroundColor: PORT_COLORS[i] }}
+                    />
+                    <span className="port-name">P{i + 1}</span>
+                    <span className="port-stats">
+                      {count}/{PORT_PIXEL_LIMIT}
+                    </span>
+                    <div className="port-progress">
+                      <div 
+                        className="port-progress-fill"
+                        style={{ 
+                          width: `${Math.min(100, (count / PORT_PIXEL_LIMIT) * 100)}%`,
+                          backgroundColor: count > PORT_PIXEL_LIMIT ? '#ff4444' : PORT_COLORS[i]
+                        }}
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="toolbar-divider" />
         <div className="toolbar-group">
           <label className="toolbar-label">Font:</label>
           <span className="toolbar-value">{fontName || 'None'}</span>
