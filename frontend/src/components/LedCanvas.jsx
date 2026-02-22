@@ -65,8 +65,11 @@ export default function LedCanvas({
   const selLetterRef    = useRef(selectedLetterIndex);
   const portNodesRef    = useRef(portNodes);
   const letterPortMapRef = useRef(letterPortMap);
-  const disconnectedRef  = useRef(disconnectedAfter);
+  const visiblePortsRef  = useRef(visiblePorts);
   const selPortIdxRef    = useRef(selectedPortIndex);
+  const approvedRef      = useRef(approvedLetters);
+  const manualWiresRef   = useRef(manualWires);
+  const wireConnectStartRef = useRef(wireConnectStart);
 
   pixelsRef.current     = pixels;
   wiringRef.current     = wiringOrder;
@@ -82,8 +85,11 @@ export default function LedCanvas({
   selLetterRef.current  = selectedLetterIndex;
   portNodesRef.current  = portNodes;
   letterPortMapRef.current = letterPortMap;
-  disconnectedRef.current = disconnectedAfter;
+  visiblePortsRef.current = visiblePorts;
   selPortIdxRef.current = selectedPortIndex;
+  approvedRef.current   = approvedLetters;
+  manualWiresRef.current = manualWires;
+  wireConnectStartRef.current = wireConnectStart;
 
   const toScreen = (x, y) => ({
     sx: x * scaleRef.current + offsetRef.current.x,
