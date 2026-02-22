@@ -241,9 +241,9 @@ export default function ToolPanel({
         </div>
       </div>
 
-      {/* ── Break Apart ──────────────────────── */}
+      {/* ── Letter Wiring (Two-Stage) ────────────── */}
       <div className="panel-section">
-        <div className="section-title">Letter Layout</div>
+        <div className="section-title">Letter Wiring</div>
         <button
           className={`btn btn-full ${isBreakApart ? 'btn-primary' : 'btn-secondary'}`}
           onClick={onBreakApartToggle}
@@ -253,26 +253,38 @@ export default function ToolPanel({
           <Scissors size={13}/>
           {isBreakApart ? 'Exit Break-Apart' : 'Break Apart Letters'}
         </button>
+        
         {isBreakApart && (
           <>
-            <div className="tooltip-hint" style={{ marginBottom: 6 }}>
-              Click a letter's pixels to select & zoom it independently
+            <div className="tooltip-hint" style={{ marginBottom: 8 }}>
+              Click a letter to select it. Then approve wiring or modify.
             </div>
-            {/* Disconnect wiring button - only visible in break apart mode */}
-            <button
-              className={`btn btn-full ${disconnectedAfter?.has(selectedLetterIndex) ? 'btn-danger' : 'btn-secondary'}`}
-              onClick={onDisconnectLetterWiring}
-              disabled={selectedLetterIndex === null}
-              data-testid="btn-disconnect-letter"
-              style={{ fontSize: 11, padding: '5px 8px' }}>
-              <Unplug size={12}/>
-              {disconnectedAfter?.has(selectedLetterIndex) ? 'Reconnect After Letter' : 'Disconnect After Letter'}
-            </button>
+            
+            {/* Approve / Unapprove Letter Wiring */}
             {selectedLetterIndex !== null && (
-              <div className="tooltip-hint" style={{ marginTop: 4, color: 'var(--warning)' }}>
-                {disconnectedAfter?.has(selectedLetterIndex) 
-                  ? 'Wiring disconnected after this letter (visual gap)'
-                  : 'Click to disconnect wiring after this letter'}
+              <div style={{ marginBottom: 8 }}>
+                {isLetterApproved ? (
+                  <button
+                    className="btn btn-full btn-danger"
+                    onClick={onUnapproveLetterWiring}
+                    data-testid="btn-unapprove-letter"
+                    style={{ fontSize: 12, padding: '8px 10px' }}>
+                    <XCircle size={14}/> Unapprove Letter Wiring
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-full btn-success"
+                    onClick={onApproveLetterWiring}
+                    data-testid="btn-approve-letter"
+                    style={{ fontSize: 12, padding: '8px 10px', background: 'var(--success)', borderColor: 'var(--success)' }}>
+                    <CheckCircle size={14}/> Approve Letter Wiring
+                  </button>
+                )}
+                <div className="tooltip-hint" style={{ marginTop: 4 }}>
+                  {isLetterApproved 
+                    ? 'Letter wiring approved! Blue wiring is now visible.'
+                    : 'Approve to finalize wiring (shown as dashed preview until approved)'}
+                </div>
               </div>
             )}
           </>
