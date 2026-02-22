@@ -8,7 +8,7 @@ import PortsPanel from './components/PortsPanel';
 import StatusPanel from './components/StatusPanel';
 import { parseFont, getGlyphPathMm, getAdvanceWidth } from './utils/fontParser';
 import { generatePixelsForText, buildPixelObjects } from './utils/pixelUtils';
-import { autoSnakeWiringPerLetter, getPortStats, buildInitialPortNodes } from './utils/wireUtils';
+import { autoSnakeWiringPerLetter, getPortStats, buildInitialPortNodes, renumberPixelsInOrder } from './utils/wireUtils';
 import { generateDXF, generateCJB, downloadFile } from './utils/exportUtils';
 
 const MAX_HISTORY = 10;
