@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, X } from 'lucide-react';
+import { PORT_COLORS, PORT_PIXEL_LIMIT } from '../utils/wireUtils';
 
 // Default fonts available in the app
 export const DEFAULT_FONTS = [
@@ -35,7 +36,9 @@ export default function MenuBar({
   // Text
   text, onTextChange,
   // Generate
-  canGenerate, onGenerate, isGenerating
+  canGenerate, onGenerate, isGenerating,
+  // Ports (new)
+  activePort, onActivePortChange, portStats
 }) {
   const [openMenu, setOpenMenu] = useState(null);
   const [showFontDialog, setShowFontDialog] = useState(false);
