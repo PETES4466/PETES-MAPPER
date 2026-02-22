@@ -132,7 +132,7 @@ export default function App() {
     setIsGenerating(true);
     try {
       await new Promise(r => setTimeout(r, 10));
-      const settings = { fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm };
+      const settings = { fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm, pixelOdMm };
       const raw = generatePixelsForText(font, text, settings);
       const base = buildPixelObjects(raw);
 
@@ -159,7 +159,7 @@ export default function App() {
     } finally {
       setIsGenerating(false);
     }
-  }, [font, text, fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm, wiringDirection, saveToHistory]);
+  }, [font, text, fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm, pixelOdMm, wiringDirection, saveToHistory]);
 
   // ── Re-Wire ──────────────────────────────────────────────────────────────
   const handleReWire = useCallback(() => {
