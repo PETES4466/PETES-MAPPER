@@ -333,21 +333,19 @@ export default function App() {
     }
   }, [selectedIds]);
 
-  // ── Connect Wire (from context menu) ──────────────────────────────────────
+  // ── Connect Wire (from context menu - NO AUTO REWIRING) ────────────────────
   const handleConnectWire = useCallback(() => {
     if (selectedIds.size < 2) return;
     
-    // Clear broken wiring for selected pixels and rewire
+    // Just clear broken wiring for selected pixels - preserve user's order
     const updatedPixels = pixels.map(p => 
       selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p
     );
     
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(updatedPixels, wiringDirection, edgeMarginMm);
-    setPixels(wiredPixels);
-    setWiringOrder(order);
-    saveToHistory(wiredPixels, order);
+    setPixels(updatedPixels);
+    saveToHistory(updatedPixels, wiringOrder);
     setContextMenu(null);
-  }, [selectedIds, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+  }, [selectedIds, pixels, wiringOrder, saveToHistory]);
 
   // ── Disconnect Wire (from context menu) ───────────────────────────────────
   const handleDisconnectWire = useCallback(() => {
@@ -360,7 +358,7 @@ export default function App() {
     setContextMenu(null);
   }, [selectedIds]);
 
-  // ── Add Multiple Pixels (from context menu) ──────────────────────────────
+  // ── Add Multiple Pixels (from context menu - NO AUTO REWIRING) ────────────
   const handleAddMultiplePixels = useCallback((count) => {
     if (selectedIds.size < 2 || count < 1) return;
     
@@ -373,41 +371,52 @@ export default function App() {
     
     let counter = Date.now();
     const newPixels = [];
+    const insertions = [];
     
     // Add 'count' pixels between each consecutive pair
     for (let i = 0; i < selectedInOrder.length - 1; i++) {
       const p1 = selectedInOrder[i];
       const p2 = selectedInOrder[i + 1];
+      const p1Idx = wiringOrder.indexOf(p1.id);
       
       for (let j = 1; j <= count; j++) {
         const t = j / (count + 1);
         const x = p1.x + (p2.x - p1.x) * t;
         const y = p1.y + (p2.y - p1.y) * t;
         
-        newPixels.push({
+        const newPx = {
           id: `px_add_${counter++}`,
           x, y,
           type: p1.type,
           letter: p1.letter,
           letterIndex: p1.letterIndex,
-          portIndex: -1,
+          portIndex: p1.portIndex, // Inherit port
           portPixelIndex: -1,
           borderOrder: -1,
           fillOrder: -1,
           isBorderFirst: false, isBorderLast: false,
           isFillFirst: false, isFillLast: false
-        });
+        };
+        newPixels.push(newPx);
+        insertions.push({ afterIdx: p1Idx + j - 1, pixelId: newPx.id });
       }
     }
     
+    // Build new wiring order with insertions
+    const newWiringOrder = [...wiringOrder];
+    insertions.reverse().forEach(({ afterIdx, pixelId }) => {
+      newWiringOrder.splice(afterIdx + 1, 0, pixelId);
+    });
+    
     const allPixels = [...pixels, ...newPixels];
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(allPixels, wiringDirection, edgeMarginMm);
-    setPixels(wiredPixels);
-    setWiringOrder(order);
+    const renumberedPixels = renumberPixelsInOrder(allPixels, newWiringOrder);
+    
+    setPixels(renumberedPixels);
+    setWiringOrder(newWiringOrder);
     setSelectedIds(new Set(newPixels.map(p => p.id)));
-    saveToHistory(wiredPixels, order);
+    saveToHistory(renumberedPixels, newWiringOrder);
     setContextMenu(null);
-  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+  }, [selectedIds, wiringOrder, pixels, saveToHistory]);
 
   // ── Port Selection (from dropdown) ─────────────────────────────────────────
   const handleActivePortChange = useCallback((portIndex) => {
