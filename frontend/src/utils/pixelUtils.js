@@ -156,7 +156,8 @@ export function generateBorderPixels(font, char, fontSizeMm, xOffsetMm, spacingM
 }
 
 // ── Fill pixels ──────────────────────────────────────────────────────────────
-export function generateFillPixels(font, char, fontSizeMm, xOffsetMm, spacingMm, edgeMarginMm = 0) {
+// Stricter placement: ensure entire pixel circle stays inside the glyph
+export function generateFillPixels(font, char, fontSizeMm, xOffsetMm, spacingMm, edgeMarginMm = 0, pixelOdMm = 12) {
   const SCALE = getFillScale(fontSizeMm);
   const mask = createGlyphMask(font, char, fontSizeMm, xOffsetMm, SCALE);
   if (!mask) return [];
@@ -164,13 +165,15 @@ export function generateFillPixels(font, char, fontSizeMm, xOffsetMm, spacingMm,
 
   const spacingPx = spacingMm * SCALE;
   const marginPx  = edgeMarginMm * SCALE;
+  const pixelRadiusPx = (pixelOdMm / 2) * SCALE; // Half the pixel diameter
   const pixels = [];
 
   for (let yPx = minY; yPx <= maxY; yPx += spacingPx) {
     for (let xPx = minX; xPx <= maxX; xPx += spacingPx) {
       const cx = Math.round(xPx + tx);
       const cy = Math.round(yPx + ty);
-      if (isInsideWithMargin(imgData, w, h, cx, cy, marginPx)) {
+      // Check if the entire pixel circle (center + radius + margin) fits inside
+      if (isInsideWithMargin(imgData, w, h, cx, cy, marginPx, pixelRadiusPx)) {
         pixels.push({ x: xPx / SCALE, y: yPx / SCALE, type: 'fill' });
       }
     }
