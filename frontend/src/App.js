@@ -360,7 +360,19 @@ export default function App() {
     setContextMenu(null);
   }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
 
-  // ── Port Selection ───────────────────────────────────────────────────────
+  // ── Port Selection (from dropdown) ─────────────────────────────────────────
+  const handleActivePortChange = useCallback((portIndex) => {
+    setActivePort(portIndex);
+    // Automatically make port visible when selected
+    setVisiblePorts(prev => {
+      const next = new Set(prev);
+      next.add(portIndex);
+      return next;
+    });
+    setSelectedPortIndex(portIndex);
+  }, []);
+
+  // ── Port Selection (from panel - toggle visibility) ───────────────────────
   const handleSelectPort = useCallback((portIndex) => {
     setVisiblePorts(prev => {
       const next = new Set(prev);
