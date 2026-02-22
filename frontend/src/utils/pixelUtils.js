@@ -87,7 +87,8 @@ function isInsideWithMargin(imgData, w, h, cx, cy, marginPx, pixelRadiusPx = 0) 
 }
 
 // ── Border pixels ────────────────────────────────────────────────────────────
-export function generateBorderPixels(font, char, fontSizeMm, xOffsetMm, spacingMm, countOverride, edgeMarginMm = 0) {
+// Stricter placement: ensure entire pixel circle stays inside the glyph
+export function generateBorderPixels(font, char, fontSizeMm, xOffsetMm, spacingMm, countOverride, edgeMarginMm = 0, pixelOdMm = 12) {
   const SCALE = getBorderScale(fontSizeMm);
   const fontSizePx = fontSizeMm * SCALE;
   const glyph = font.charToGlyph(char);
@@ -117,7 +118,10 @@ export function generateBorderPixels(font, char, fontSizeMm, xOffsetMm, spacingM
     allPts.push(...pts.map((pt, i) => ({ ...pt, _contourIdx: i, _polyLen: poly.length, _poly: poly })));
   }
 
-  if (edgeMarginMm <= 0) {
+  // Minimum edge margin should include pixel radius to prevent bleeding
+  const effectiveMargin = Math.max(edgeMarginMm, pixelOdMm / 2);
+
+  if (effectiveMargin <= 0) {
     return allPts.map(pt => ({ x: pt.x, y: pt.y, type: 'border' }));
   }
 
@@ -141,16 +145,16 @@ export function generateBorderPixels(font, char, fontSizeMm, xOffsetMm, spacingM
     const n2 = { x: tdy / tlen, y: -tdx / tlen };
 
     function testNormal(nx, ny) {
-      const testX = Math.round((pt.x + nx * (edgeMarginMm + 1)) * FILL_SC + tx);
-      const testY = Math.round((pt.y + ny * (edgeMarginMm + 1)) * FILL_SC + ty);
+      const testX = Math.round((pt.x + nx * (effectiveMargin + 1)) * FILL_SC + tx);
+      const testY = Math.round((pt.y + ny * (effectiveMargin + 1)) * FILL_SC + ty);
       if (testX < 0 || testX >= w || testY < 0 || testY >= h) return false;
       return imgData.data[(testY * w + testX) * 4] > 128;
     }
 
     const use1 = testNormal(n1.x, n1.y);
     const use2 = testNormal(n2.x, n2.y);
-    if (use1) return { x: pt.x + n1.x * edgeMarginMm, y: pt.y + n1.y * edgeMarginMm, type: 'border' };
-    if (use2) return { x: pt.x + n2.x * edgeMarginMm, y: pt.y + n2.y * edgeMarginMm, type: 'border' };
+    if (use1) return { x: pt.x + n1.x * effectiveMargin, y: pt.y + n1.y * effectiveMargin, type: 'border' };
+    if (use2) return { x: pt.x + n2.x * effectiveMargin, y: pt.y + n2.y * effectiveMargin, type: 'border' };
     return { x: pt.x, y: pt.y, type: 'border' };
   });
 }
