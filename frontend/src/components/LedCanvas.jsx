@@ -3,6 +3,7 @@ import { PORT_COLORS, LETTER_COLORS, BORDER_COLOR, FILL_COLOR, computeLetterZoom
 
 const WIRING_DRAFT_COLOR = 'rgba(255,200,30,0.5)';  // Dashed preview wiring
 const WIRING_APPROVED_COLOR = '#1E90FF';             // Solid blue approved wiring
+const WIRING_COLOR = 'rgba(255,200,30,0.7)';         // Default wiring line color
 const PENDING_COLOR  = 'rgba(0,212,255,0.9)';
 const GUIDE_FILL     = 'rgba(15,40,100,0.35)';
 const GUIDE_STROKE   = '#1E7FFF';        // thick blue guide border
