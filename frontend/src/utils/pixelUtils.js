@@ -64,16 +64,21 @@ function createGlyphMask(font, char, fontSizeMm, xOffsetMm, scale) {
 }
 
 // Check if a point (in canvas-scale pixels) is inside the glyph with margin
-function isInsideWithMargin(imgData, w, h, cx, cy, marginPx) {
+// Enhanced to ensure pixel circles don't bleed outside
+function isInsideWithMargin(imgData, w, h, cx, cy, marginPx, pixelRadiusPx = 0) {
   if (cx < 0 || cx >= w || cy < 0 || cy >= h) return false;
   if (imgData.data[(cy * w + cx) * 4] <= 128) return false;
-  if (marginPx <= 0) return true;
-  // 16-point ring check at margin radius
-  const r = marginPx;
-  for (let i = 0; i < 16; i++) {
-    const angle = (i / 16) * Math.PI * 2;
-    const mx = Math.round(cx + Math.cos(angle) * r);
-    const my = Math.round(cy + Math.sin(angle) * r);
+  
+  // Check the actual pixel circle boundary, not just the center
+  const checkRadius = marginPx + pixelRadiusPx;
+  if (checkRadius <= 0) return true;
+  
+  // 24-point ring check at margin + pixel radius for more precision
+  const points = 24;
+  for (let i = 0; i < points; i++) {
+    const angle = (i / points) * Math.PI * 2;
+    const mx = Math.round(cx + Math.cos(angle) * checkRadius);
+    const my = Math.round(cy + Math.sin(angle) * checkRadius);
     if (mx < 0 || mx >= w || my < 0 || my >= h || imgData.data[(my * w + mx) * 4] <= 128) {
       return false;
     }
