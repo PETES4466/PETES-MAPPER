@@ -42,8 +42,10 @@ export default function MenuBar({
 }) {
   const [openMenu, setOpenMenu] = useState(null);
   const [showFontDialog, setShowFontDialog] = useState(false);
+  const [showPortDropdown, setShowPortDropdown] = useState(false);
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);
+  const portDropdownRef = useRef(null);
 
   // Close menu when clicking outside
   useEffect(() => {
