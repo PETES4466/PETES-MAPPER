@@ -183,7 +183,7 @@ export function generateFillPixels(font, char, fontSizeMm, xOffsetMm, spacingMm,
 
 // ── Full text pixel generation ───────────────────────────────────────────────
 export function generatePixelsForText(font, text, settings) {
-  const { fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm = 3 } = settings;
+  const { fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm = 3, pixelOdMm = 12 } = settings;
   const allRaw = [];
   let xOffset = 0;
 
@@ -194,10 +194,10 @@ export function generatePixelsForText(font, text, settings) {
     const charPixels = [];
     if (mode === 'border' || mode === 'both') {
       const count = borderPixelCount === 'auto' ? null : parseInt(borderPixelCount, 10);
-      charPixels.push(...generateBorderPixels(font, char, fontSizeMm, xOffset, borderSpacingMm, count, edgeMarginMm));
+      charPixels.push(...generateBorderPixels(font, char, fontSizeMm, xOffset, borderSpacingMm, count, edgeMarginMm, pixelOdMm));
     }
     if (mode === 'fill' || mode === 'both') {
-      charPixels.push(...generateFillPixels(font, char, fontSizeMm, xOffset, fillSpacingMm, edgeMarginMm));
+      charPixels.push(...generateFillPixels(font, char, fontSizeMm, xOffset, fillSpacingMm, edgeMarginMm, pixelOdMm));
     }
 
     charPixels.forEach(p => { p.letter = char; p.letterIndex = i; });
