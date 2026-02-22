@@ -608,7 +608,8 @@ export default function LedCanvas({
     pixels, wiringOrder, guideCommands, selectedIds,
     showNumbers, showWiring, showGuide, pendingWire, pixelOdMm,
     isBreakApart, selectedLetterIndex, render,
-    portNodes, letterPortMap, disconnectedAfter, selectedPortIndex
+    portNodes, letterPortMap, visiblePorts, selectedPortIndex,
+    approvedLetters, manualWires, wireConnectStart
   ]);
 
   // ── Zoom-to-letter callback ──────────────────────────────────────────────
