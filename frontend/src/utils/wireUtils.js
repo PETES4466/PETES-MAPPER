@@ -210,7 +210,7 @@ function ensureStartEndSpacing(orderedPixels, minSpacing) {
 // Each letter has:
 //   - Border pixels: numbered 1 to N with borderFirst/borderLast markers
 //   - Fill pixels: numbered 1 to M with fillFirst/fillLast markers
-// NO auto-connection between letters
+// Uses nearest neighbor algorithm to stay within letter boundaries
 export function autoSnakeWiringPerLetter(pixels, direction = 'ltr-ttb', minSpacing = 12) {
   if (!pixels.length) return { wiredPixels: [], wiringOrder: [] };
 
@@ -229,10 +229,11 @@ export function autoSnakeWiringPerLetter(pixels, direction = 'ltr-ttb', minSpaci
   for (const letterIdx of letterKeys) {
     const { border, fill } = byLetter[letterIdx];
     
-    // Process border pixels for this letter
-    let orderedBorder = border.length > 0 ? [...border] : [];
-    if (orderedBorder.length > 0) {
-      // Border follows contour - already in order from placement, just apply snake
+    // Process border pixels using nearest neighbor
+    if (border.length > 0) {
+      // For border, use the original contour order as it follows the shape
+      let orderedBorder = nearestNeighborWiring(pixels, letterIdx, 'border');
+      if (orderedBorder.length === 0) orderedBorder = border;
       orderedBorder = ensureStartEndSpacing(orderedBorder, minSpacing);
       
       orderedBorder.forEach((p, idx) => {
@@ -245,16 +246,18 @@ export function autoSnakeWiringPerLetter(pixels, direction = 'ltr-ttb', minSpaci
           isFillFirst: false,
           isFillLast: false,
           portIndex: -1,
-          portPixelIndex: -1
+          portPixelIndex: -1,
+          isSmartWired: true  // Mark as smart-wired
         };
         wiredPixels.push(wiredP);
         wiringOrder.push(wiredP.id);
       });
     }
     
-    // Process fill pixels for this letter
-    let orderedFill = fill.length > 0 ? smartSnakeFill(fill, direction) : [];
-    if (orderedFill.length > 0) {
+    // Process fill pixels using nearest neighbor
+    if (fill.length > 0) {
+      let orderedFill = nearestNeighborWiring(pixels, letterIdx, 'fill');
+      if (orderedFill.length === 0) orderedFill = smartSnakeFill(fill, direction);
       orderedFill = ensureStartEndSpacing(orderedFill, minSpacing);
       
       orderedFill.forEach((p, idx) => {
@@ -267,7 +270,8 @@ export function autoSnakeWiringPerLetter(pixels, direction = 'ltr-ttb', minSpaci
           isFillFirst: idx === 0,
           isFillLast: idx === orderedFill.length - 1,
           portIndex: -1,
-          portPixelIndex: -1
+          portPixelIndex: -1,
+          isSmartWired: true
         };
         wiredPixels.push(wiredP);
         wiringOrder.push(wiredP.id);
