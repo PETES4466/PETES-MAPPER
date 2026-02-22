@@ -16,7 +16,7 @@ frontend/src/
   App.js                    - Main app with professional layout
   App.css                   - Professional dark theme
   components/
-    MenuBar.jsx             - Top menu bar with File/Edit/View/Tools
+    MenuBar.jsx             - Top menu bar with File/Edit/View/Tools + Port Dropdown
     Toolbar.jsx             - Left vertical toolbar (tools + actions)
     PropertiesPanel.jsx     - Collapsible left properties panel
     LedCanvas.jsx           - Main interactive canvas
@@ -24,12 +24,35 @@ frontend/src/
     StatusPanel.jsx         - Bottom status bar
   utils/
     fontParser.js           - opentype.js wrapper
-    pixelUtils.js           - Pixel placement
-    wireUtils.js            - Smart wiring within letters
+    pixelUtils.js           - Pixel placement with strict boundary checking
+    wireUtils.js            - Smart wiring with nearest neighbor algorithm
     exportUtils.js          - DXF/CJB export
 ```
 
 ## What's Been Implemented
+
+### v6 - Smart Wiring & Port Dropdown (2026-02-22)
+**Port Management:**
+- Port dropdown menu in MenuBar showing "P1 (156/1024)" format
+- All 8 ports (P1-P8) with color indicators and progress bars
+- Selecting port automatically makes it visible on canvas
+
+**Pixel Placement:**
+- Stricter boundary checking to prevent pixels bleeding outside font outline
+- Edge margin now includes pixel radius for accurate placement
+- 24-point ring check for more precise boundary detection
+
+**Smart Wiring:**
+- Nearest neighbor wiring algorithm
+- Stays within letter boundaries (won't jump across gaps in letters like 'H', 'A')
+- Wiring displayed as dotted red lines (recommendation)
+
+**UI Improvements:**
+- Font outline rendered as thin white reference line
+- Enhanced right-click context menu with:
+  - Add Pixels Between (requires 2+ selected)
+  - Connect Wire (requires 2+ selected)
+  - Disconnect Wire (requires 1+ selected)
 
 ### v5 - Professional UI Overhaul (2026-02-22)
 **Major UI Redesign:**
@@ -61,19 +84,22 @@ frontend/src/
 ## Prioritized Backlog
 
 ### P0 - Critical
-- [ ] Test CJB export with actual LedEdit software
-- [ ] System fonts access or add more default fonts
-- [ ] Smart wiring never goes outside letter boundaries
+- [x] Port dropdown menu in MenuBar
+- [x] Stricter pixel placement (no bleeding outside font outline)
+- [x] Smart wiring using nearest neighbor algorithm
+- [x] Enhanced right-click context menu (Connect/Disconnect Wire)
+- [ ] Fix CJB export compatibility with LedEdit software
 
 ### P1 - High Value
-- [ ] Arrow wiring direction tool
 - [ ] Per-letter independent export
+- [ ] Arrow wiring direction tool
 
 ### P2 - Enhancement
 - [ ] Save/load project as JSON
 - [ ] Desktop app (Electron/Tauri)
+- [ ] System fonts access or more default fonts
 
 ## Next Tasks
 1. Verify CJB export compatibility with LedEdit
-2. Improve smart wiring to stay within letter bounds
+2. Per-letter independent export feature
 3. Add system fonts or more default fonts
