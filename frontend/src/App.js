@@ -10,6 +10,7 @@ import { parseFont, getGlyphPathMm, getAdvanceWidth } from './utils/fontParser';
 import { generatePixelsForText, buildPixelObjects } from './utils/pixelUtils';
 import { autoSnakeWiringPerLetter, getPortStats, buildInitialPortNodes } from './utils/wireUtils';
 import { generateDXF, generateCJB, downloadFile } from './utils/exportUtils';
+import { verifyLedEditLayout } from './utils/verificationUtils';
 
 const MAX_HISTORY = 10;
 
@@ -71,6 +72,7 @@ export default function App() {
 
   // ── Export ───────────────────────────────────────────────────────────────
   const [exportFormat, setExportFormat] = useState('dxf');
+  const [verifyStatus, setVerifyStatus] = useState(null);
 
   const canvasRef = useRef(null);
 
@@ -446,15 +448,38 @@ export default function App() {
   }, []);
 
   // ── Export ───────────────────────────────────────────────────────────────
-  const handleExport = useCallback(() => {
-    if (!pixels.length) return;
-    const s = { pixelOdMm, text, fontSizeMm };
-    if (exportFormat === 'dxf') {
-      downloadFile(generateDXF(pixels, wiringOrder, s), `led_${text.replace(/\s+/g, '_')}.dxf`, 'application/dxf');
+  const handleVerifyLedEdit = useCallback(() => {
+    const result = verifyLedEditLayout(pixels, wiringOrder, letterPortMap);
+    setVerifyStatus(result);
+
+    if (result.ok) {
+      alert(`✅ ${result.summary}`);
     } else {
-      downloadFile(generateCJB(pixels, wiringOrder, s), `led_${text.replace(/\s+/g, '_')}.cjb`, 'application/xml');
+      const topErrors = result.errors.slice(0, 6).map((e, i) => `${i + 1}. ${e}`).join('\n');
+      alert(`❌ ${result.summary}\n\n${topErrors}`);
     }
-  }, [pixels, wiringOrder, exportFormat, pixelOdMm, text, fontSizeMm]);
+    return result;
+  }, [pixels, wiringOrder, letterPortMap]);
+
+  const handleExport = useCallback((formatOverride = null) => {
+    if (!pixels.length) return;
+    const verifyResult = verifyLedEditLayout(pixels, wiringOrder, letterPortMap);
+    setVerifyStatus(verifyResult);
+    if (!verifyResult.ok) {
+      const topErrors = verifyResult.errors.slice(0, 6).map((e, i) => `${i + 1}. ${e}`).join('\n');
+      alert(`Cannot export until verification passes.\n\n${topErrors}`);
+      return;
+    }
+
+    const targetFormat = formatOverride || exportFormat;
+    const exportPixels = verifyResult.exportPixels || pixels;
+    const s = { pixelOdMm, text, fontSizeMm };
+    if (targetFormat === 'dxf') {
+      downloadFile(generateDXF(exportPixels, wiringOrder, s), `led_${text.replace(/\s+/g, '_')}.dxf`, 'application/dxf');
+    } else {
+      downloadFile(generateCJB(exportPixels, wiringOrder, s), `led_${text.replace(/\s+/g, '_')}.cjb`, 'application/xml');
+    }
+  }, [pixels, wiringOrder, letterPortMap, exportFormat, pixelOdMm, text, fontSizeMm]);
 
   // Close context menu on click outside
   const handleCloseContextMenu = useCallback(() => {
@@ -468,8 +493,8 @@ export default function App() {
         onLoadFont={handleFontLoad}
         mode={mode}
         onModeChange={setMode}
-        onExportDXF={() => { setExportFormat('dxf'); handleExport(); }}
-        onExportCJB={() => { setExportFormat('cjb'); handleExport(); }}
+        onExportDXF={() => { setExportFormat('dxf'); handleExport('dxf'); }}
+        onExportCJB={() => { setExportFormat('cjb'); handleExport('cjb'); }}
         canUndo={historyIndex > 0}
         onUndo={handleUndo}
         canCopy={canCopy}
@@ -585,6 +610,8 @@ export default function App() {
           exportFormat={exportFormat}
           onExportFormatChange={setExportFormat}
           onExport={handleExport}
+          onVerify={handleVerifyLedEdit}
+          verifyStatus={verifyStatus}
           isCollapsed={portsCollapsed}
           onToggleCollapse={() => setPortsCollapsed(!portsCollapsed)}
         />
