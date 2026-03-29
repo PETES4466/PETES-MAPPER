@@ -13,6 +13,8 @@ export default function PortsPanel({
   exportFormat,
   onExportFormatChange,
   onExport,
+  onVerify,
+  verifyStatus,
   isCollapsed,
   onToggleCollapse
 }) {
@@ -113,6 +115,29 @@ export default function PortsPanel({
         {/* Export */}
         <div className="ports-section">
           <div className="section-title-small">Export</div>
+          <button
+            className="export-main-btn"
+            onClick={onVerify}
+            disabled={pixels.length === 0}
+            style={{
+              marginBottom: 8,
+              background: verifyStatus?.ok ? '#1f7a45' : undefined
+            }}
+            title="Validate ports, string counts, and wiring before export"
+          >
+            Verify LedEdit
+          </button>
+          {verifyStatus && (
+            <div
+              style={{
+                fontSize: 11,
+                marginBottom: 8,
+                color: verifyStatus.ok ? '#6bcb77' : '#ff8a80'
+              }}
+            >
+              {verifyStatus.ok ? 'PASS' : 'FAIL'} · {verifyStatus.summary}
+            </div>
+          )}
           <div className="export-buttons">
             <button
               className={`export-btn ${exportFormat === 'dxf' ? 'active' : ''}`}
