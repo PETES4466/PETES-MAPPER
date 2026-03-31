@@ -16,7 +16,8 @@ const LedCanvas = forwardRef(function LedCanvas({
   wireConnectStart,
   portNodes, onPortNodeMove, letterPortMap,
   visiblePorts, selectedPortIndex, onConnectPortToLetter,
-  manualWires
+  manualWires,
+  pathPoints, onPathClick, onPathComplete, onPathCancel
 }, ref) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
@@ -54,6 +55,7 @@ const LedCanvas = forwardRef(function LedCanvas({
   const selPortIdxRef = useRef(selectedPortIndex);
   const manualWiresRef = useRef(manualWires);
   const wireConnectStartRef = useRef(wireConnectStart);
+  const pathPointsRef = useRef(pathPoints || []);
 
   // Update refs
   pixelsRef.current = pixels;
@@ -71,6 +73,7 @@ const LedCanvas = forwardRef(function LedCanvas({
   selPortIdxRef.current = selectedPortIndex;
   manualWiresRef.current = manualWires;
   wireConnectStartRef.current = wireConnectStart;
+  pathPointsRef.current = pathPoints || [];
 
   const toScreen = (x, y) => ({
     sx: x * scaleRef.current + offsetRef.current.x,
@@ -350,6 +353,46 @@ const LedCanvas = forwardRef(function LedCanvas({
       ctx.restore();
     }
 
+    // ── Path Tool drawing ────────────────────────────────────────────────────
+    const pathPts = pathPointsRef.current;
+    if (pathPts && pathPts.length > 0) {
+      ctx.save();
+      ctx.strokeStyle = '#ffff00';
+      ctx.fillStyle = '#ffff00';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 4]);
+      
+      // Draw path line
+      ctx.beginPath();
+      for (let i = 0; i < pathPts.length; i++) {
+        const { sx, sy } = toScreen(pathPts[i].x, pathPts[i].y);
+        if (i === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Draw path points
+      for (let i = 0; i < pathPts.length; i++) {
+        const { sx, sy } = toScreen(pathPts[i].x, pathPts[i].y);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+        ctx.fillStyle = i === 0 ? '#00ff00' : '#ffff00';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        // Number
+        ctx.fillStyle = '#000000';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(i + 1, sx, sy);
+      }
+      ctx.restore();
+    }
+
     // ── Port nodes ─────────────────────────────────────────────────────────
     const ports = portNodesRef.current || [];
     const visibleSet = visiblePortsRef.current || new Set();
@@ -441,7 +484,7 @@ const LedCanvas = forwardRef(function LedCanvas({
     pixels, wiringOrder, guideCommands, selectedIds,
     showNumbers, showWiring, showGuide, pixelOdMm, render,
     portNodes, letterPortMap, visiblePorts, selectedPortIndex,
-    manualWires, wireConnectStart
+    manualWires, wireConnectStart, pathPoints
   ]);
 
   // ── Event handlers ───────────────────────────────────────────────────────
@@ -491,6 +534,17 @@ const LedCanvas = forwardRef(function LedCanvas({
         onWireConnectClick?.(hit.id);
         render();
       }
+      return;
+    }
+
+    // Path tool - add point on click
+    if (tool === 'path') {
+      const scale = scaleRef.current;
+      const offset = offsetRef.current;
+      const wx = (mx - offset.x) / scale;
+      const wy = (my - offset.y) / scale;
+      onPathClick?.(wx, wy);
+      render();
       return;
     }
 

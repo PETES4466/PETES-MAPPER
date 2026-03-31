@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   MousePointer, Move, Cable, Copy, Clipboard, Trash2, 
-  Undo2, Scissors, Link2, RotateCcw
+  Undo2, Scissors, Link2, RotateCcw, PenTool
 } from 'lucide-react';
 
 export default function Toolbar({
@@ -13,11 +13,13 @@ export default function Toolbar({
   canBreakWire, onBreakWire,
   canJoinWire, onJoinWire,
   onReWire,
-  wireConnectStart
+  wireConnectStart,
+  pathPoints
 }) {
   const tools = [
     { id: 'select', icon: MousePointer, label: 'Select (V)', shortcut: 'V' },
     { id: 'pan', icon: Move, label: 'Pan (H)', shortcut: 'H' },
+    { id: 'path', icon: PenTool, label: 'Path Tool (P) - Draw wiring path', shortcut: 'P' },
     { id: 'wireconnect', icon: Cable, label: 'Wire Connect (W)', shortcut: 'W' },
   ];
 
@@ -42,7 +44,7 @@ export default function Toolbar({
         {tools.map(tool => (
           <button
             key={tool.id}
-            className={`toolbar-btn ${activeTool === tool.id ? 'active' : ''} ${tool.id === 'wireconnect' && wireConnectStart ? 'pending' : ''}`}
+            className={`toolbar-btn ${activeTool === tool.id ? 'active' : ''} ${tool.id === 'wireconnect' && wireConnectStart ? 'pending' : ''} ${tool.id === 'path' && pathPoints?.length > 0 ? 'pending' : ''}`}
             onClick={() => onToolChange(tool.id)}
             title={tool.label}
             data-testid={`tool-${tool.id}`}

@@ -148,6 +148,14 @@ export default function App() {
       if (key === 'H') setActiveTool('pan');
       if (key === 'P') setActiveTool('path');
       
+      // Path tool: Enter to complete, Escape to cancel
+      if (e.key === 'Enter' && pathPoints.length >= 2) {
+        handlePathComplete();
+      }
+      if (e.key === 'Escape' && pathPoints.length > 0) {
+        handlePathCancel();
+      }
+      
       // Delete
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedIds.size > 0) {
@@ -160,7 +168,7 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeController, selectedIds]);
+  }, [activeController, selectedIds, pathPoints]);
 
   // Computed values
   const portStats = useMemo(() => getPortStats(pixels), [pixels]);
@@ -187,6 +195,69 @@ export default function App() {
     });
     setHistoryIndex(prev => Math.min(prev + 1, MAX_HISTORY - 1));
   }, [historyIndex]);
+
+  // ── Path Tool Handlers ─────────────────────────────────────────────────────
+  const handlePathClick = useCallback((x, y) => {
+    if (activeTool !== 'path') return;
+    setPathPoints(prev => [...prev, { x, y, id: `path_${Date.now()}` }]);
+  }, [activeTool]);
+
+  const handlePathComplete = useCallback(() => {
+    if (pathPoints.length < 2) {
+      setPathPoints([]);
+      return;
+    }
+    
+    const pathPixels = [];
+    const usedIds = new Set();
+    
+    for (const point of pathPoints) {
+      let nearestPixel = null;
+      let nearestDist = 30;
+      
+      for (const p of pixels) {
+        if (usedIds.has(p.id)) continue;
+        const dist = Math.sqrt((p.x - point.x) ** 2 + (p.y - point.y) ** 2);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestPixel = p;
+        }
+      }
+      
+      if (nearestPixel) {
+        pathPixels.push(nearestPixel);
+        usedIds.add(nearestPixel.id);
+      }
+    }
+    
+    if (pathPixels.length >= 2) {
+      const newWiringOrder = pathPixels.map(p => p.id);
+      const otherIds = wiringOrder.filter(id => !usedIds.has(id));
+      
+      const updatedPixels = pixels.map(p => {
+        const pathIdx = pathPixels.findIndex(pp => pp.id === p.id);
+        if (pathIdx >= 0) {
+          return {
+            ...p,
+            portId: activePortId,
+            portPixelIndex: pathIdx + 1,
+            order: pathIdx
+          };
+        }
+        return p;
+      });
+      
+      setPixels(updatedPixels);
+      setWiringOrder([...newWiringOrder, ...otherIds]);
+      saveToHistory(updatedPixels, [...newWiringOrder, ...otherIds]);
+    }
+    
+    setPathPoints([]);
+  }, [pathPoints, pixels, wiringOrder, activePortId, saveToHistory]);
+
+  const handlePathCancel = useCallback(() => {
+    setPathPoints([]);
+  }, []);
 
   // ── Undo ─────────────────────────────────────────────────────────────────
   const handleUndo = useCallback(() => {
@@ -650,6 +721,7 @@ export default function App() {
           onJoinWire={handleJoinWire}
           onReWire={handleReWire}
           wireConnectStart={wireConnectStart}
+          pathPoints={pathPoints}
         />
 
         {/* Properties Panel */}
@@ -698,6 +770,10 @@ export default function App() {
               selectedPortIndex={selectedPortIndex}
               onConnectPortToLetter={handleConnectPortToLetter}
               manualWires={manualWires}
+              pathPoints={pathPoints}
+              onPathClick={handlePathClick}
+              onPathComplete={handlePathComplete}
+              onPathCancel={handlePathCancel}
             />
           </div>
         </div>
