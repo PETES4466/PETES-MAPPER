@@ -7,6 +7,21 @@ const FONT_SIZE_OPTIONS = [
   160, 170, 180, 190, 200, 220, 240, 260, 280, 300
 ];
 
+// Pixel OD options (mm)
+const PIXEL_OD_OPTIONS = [8, 10, 12, 14, 16, 18, 20];
+
+// Fill spacing options (mm)
+const FILL_SPACING_OPTIONS = [10, 12, 14, 15, 16, 18, 20, 22, 24, 26, 28, 30];
+
+// Border spacing options (mm)
+const BORDER_SPACING_OPTIONS = [8, 10, 12, 14, 16, 18, 20, 22, 24, 25];
+
+// Edge margin options (mm)
+const EDGE_MARGIN_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// Letter spacing options (cm)
+const LETTER_SPACING_OPTIONS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
+
 function CollapsibleSection({ title, icon: Icon, children, defaultOpen = true }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   
@@ -63,82 +78,72 @@ export default function PropertiesPanel({
               className="prop-select"
             >
               {FONT_SIZE_OPTIONS.map(v => (
-                <option key={v} value={v}>{v} cm ({v*10} mm)</option>
+                <option key={v} value={v}>{v} cm</option>
               ))}
             </select>
           </div>
           <div className="prop-row">
             <label>Spacing</label>
-            <div className="prop-slider-row">
-              <input
-                type="range"
-                min="0"
-                max="5"
-                step="0.1"
-                value={letterSpacingCm}
-                onChange={(e) => onLetterSpacingCmChange(Number(e.target.value))}
-              />
-              <span className="prop-value">{letterSpacingCm} cm</span>
-            </div>
+            <select
+              value={letterSpacingCm}
+              onChange={(e) => onLetterSpacingCmChange(Number(e.target.value))}
+              className="prop-select"
+            >
+              {LETTER_SPACING_OPTIONS.map(v => (
+                <option key={v} value={v}>{v} cm</option>
+              ))}
+            </select>
           </div>
         </CollapsibleSection>
 
         <CollapsibleSection title="Pixel Grid" icon={Grid3X3}>
           <div className="prop-row">
             <label>Pixel OD</label>
-            <div className="prop-slider-row">
-              <input
-                type="range"
-                min="8"
-                max="20"
-                step="1"
-                value={pixelOdMm}
-                onChange={(e) => onPixelOdChange(Number(e.target.value))}
-              />
-              <span className="prop-value">{pixelOdMm} mm</span>
-            </div>
+            <select
+              value={pixelOdMm}
+              onChange={(e) => onPixelOdChange(Number(e.target.value))}
+              className="prop-select"
+            >
+              {PIXEL_OD_OPTIONS.map(v => (
+                <option key={v} value={v}>{v} mm</option>
+              ))}
+            </select>
           </div>
           <div className="prop-row">
             <label>Fill Spacing</label>
-            <div className="prop-slider-row">
-              <input
-                type="range"
-                min="10"
-                max="30"
-                step="1"
-                value={fillSpacingMm}
-                onChange={(e) => onFillSpacingChange(Number(e.target.value))}
-              />
-              <span className="prop-value">{fillSpacingMm} mm</span>
-            </div>
+            <select
+              value={fillSpacingMm}
+              onChange={(e) => onFillSpacingChange(Number(e.target.value))}
+              className="prop-select"
+            >
+              {FILL_SPACING_OPTIONS.map(v => (
+                <option key={v} value={v}>{v} mm</option>
+              ))}
+            </select>
           </div>
           <div className="prop-row">
             <label>Border Spacing</label>
-            <div className="prop-slider-row">
-              <input
-                type="range"
-                min="8"
-                max="25"
-                step="1"
-                value={borderSpacingMm}
-                onChange={(e) => onBorderSpacingChange(Number(e.target.value))}
-              />
-              <span className="prop-value">{borderSpacingMm} mm</span>
-            </div>
+            <select
+              value={borderSpacingMm}
+              onChange={(e) => onBorderSpacingChange(Number(e.target.value))}
+              className="prop-select"
+            >
+              {BORDER_SPACING_OPTIONS.map(v => (
+                <option key={v} value={v}>{v} mm</option>
+              ))}
+            </select>
           </div>
           <div className="prop-row">
             <label>Edge Margin</label>
-            <div className="prop-slider-row">
-              <input
-                type="range"
-                min="0"
-                max="10"
-                step="0.5"
-                value={edgeMarginMm}
-                onChange={(e) => onEdgeMarginChange(Number(e.target.value))}
-              />
-              <span className="prop-value">{edgeMarginMm} mm</span>
-            </div>
+            <select
+              value={edgeMarginMm}
+              onChange={(e) => onEdgeMarginChange(Number(e.target.value))}
+              className="prop-select"
+            >
+              {EDGE_MARGIN_OPTIONS.map(v => (
+                <option key={v} value={v}>{v} mm</option>
+              ))}
+            </select>
           </div>
           <div className="prop-row">
             <label>Border Count</label>
@@ -167,10 +172,10 @@ export default function PropertiesPanel({
               onChange={(e) => onWiringDirectionChange(e.target.value)}
               className="prop-select"
             >
-              <option value="ltr-ttb">Left→Right, Top→Bottom</option>
-              <option value="rtl-ttb">Right→Left, Top→Bottom</option>
-              <option value="ltr-btt">Left→Right, Bottom→Top</option>
-              <option value="rtl-btt">Right→Left, Bottom→Top</option>
+              <option value="ltr-ttb">L→R, T→B</option>
+              <option value="rtl-ttb">R→L, T→B</option>
+              <option value="ltr-btt">L→R, B→T</option>
+              <option value="rtl-btt">R→L, B→T</option>
             </select>
           </div>
         </CollapsibleSection>

@@ -1,7 +1,8 @@
-import { PORT_COLORS } from './wireUtils';
+import { PORT_COLORS, BORDER_COLOR, FILL_COLOR } from './wireUtils';
 
 // ─── DXF Generator ──────────────────────────────────────────────────────────
-// Produces AutoCAD R2010 DXF with LED_PORT_x layers, wiring, markers, numbers
+// Produces AutoCAD R2010 DXF with layers for border/fill pixels, wiring, markers, numbers
+// Works without requiring port assignment
 export function generateDXF(pixels, wiringOrder, settings = {}) {
   const { pixelOdMm = 12, includeWiring = true, includeNumbers = true } = settings;
   const radius = pixelOdMm / 2;
@@ -23,10 +24,16 @@ export function generateDXF(pixels, wiringOrder, settings = {}) {
   // Tables (layers)
   lines.push('0\nSECTION\n2\nTABLES');
   lines.push('0\nTABLE\n2\nLAYER\n70\n20');
+  
+  // Port layers
   const portLayerColors = [1, 2, 3, 4, 5, 6, 7, 8]; // ACI colors
   for (let i = 0; i < 8; i++) {
     lines.push(`0\nLAYER\n2\nLED_PORT_${i+1}\n70\n0\n62\n${portLayerColors[i]}\n6\nCONTINUOUS`);
   }
+  
+  // Border and Fill layers (for unassigned pixels)
+  lines.push('0\nLAYER\n2\nLED_BORDER\n70\n0\n62\n4\n6\nCONTINUOUS'); // Cyan
+  lines.push('0\nLAYER\n2\nLED_FILL\n70\n0\n62\n3\n6\nCONTINUOUS'); // Green
   lines.push('0\nLAYER\n2\nLED_WIRING\n70\n0\n62\n7\n6\nCONTINUOUS');
   lines.push('0\nLAYER\n2\nLED_MARKERS\n70\n0\n62\n3\n6\nCONTINUOUS');
   lines.push('0\nLAYER\n2\nLED_NUMBERS\n70\n0\n62\n9\n6\nCONTINUOUS');
@@ -36,49 +43,72 @@ export function generateDXF(pixels, wiringOrder, settings = {}) {
   // Entities
   lines.push('0\nSECTION\n2\nENTITIES');
 
-  // 1. LED Circles
+  // 1. LED Circles - use port layer if assigned, otherwise border/fill layer
   for (const p of pixels) {
-    const portLayer = `LED_PORT_${Math.max(1, (p.portIndex ?? 0) + 1)}`;
+    let layer;
+    if (p.portIndex !== undefined && p.portIndex >= 0) {
+      layer = `LED_PORT_${p.portIndex + 1}`;
+    } else {
+      layer = p.type === 'border' ? 'LED_BORDER' : 'LED_FILL';
+    }
     const dxfY = maxY - p.y;
-    lines.push(`0\nCIRCLE\n8\n${portLayer}\n10\n${p.x.toFixed(4)}\n20\n${dxfY.toFixed(4)}\n30\n0.0\n40\n${radius.toFixed(4)}`);
+    lines.push(`0\nCIRCLE\n8\n${layer}\n10\n${p.x.toFixed(4)}\n20\n${dxfY.toFixed(4)}\n30\n0.0\n40\n${radius.toFixed(4)}`);
   }
 
-  // 2. Wiring polylines
+  // 2. Wiring polylines - group by letter to avoid jumps between letters
   if (includeWiring && wiringOrder.length > 1) {
-    lines.push('0\nPOLYLINE\n8\nLED_WIRING\n66\n1\n70\n0');
+    // Group pixels by letter
+    const letterGroups = {};
     for (const id of wiringOrder) {
       const p = pixelMap[id];
       if (!p) continue;
-      const dxfY = maxY - p.y;
-      lines.push(`0\nVERTEX\n8\nLED_WIRING\n10\n${p.x.toFixed(4)}\n20\n${dxfY.toFixed(4)}\n30\n0.0`);
+      const key = `${p.letterIndex}_${p.type}`;
+      if (!letterGroups[key]) letterGroups[key] = [];
+      letterGroups[key].push(p);
     }
-    lines.push('0\nSEQEND');
+    
+    // Draw wiring for each letter/type group
+    for (const [key, groupPixels] of Object.entries(letterGroups)) {
+      if (groupPixels.length < 2) continue;
+      
+      lines.push('0\nPOLYLINE\n8\nLED_WIRING\n66\n1\n70\n0');
+      for (const p of groupPixels) {
+        if (p.wiringBroken) {
+          // End current polyline and start new one
+          lines.push('0\nSEQEND');
+          lines.push('0\nPOLYLINE\n8\nLED_WIRING\n66\n1\n70\n0');
+        }
+        const dxfY = maxY - p.y;
+        lines.push(`0\nVERTEX\n8\nLED_WIRING\n10\n${p.x.toFixed(4)}\n20\n${dxfY.toFixed(4)}\n30\n0.0`);
+      }
+      lines.push('0\nSEQEND');
+    }
   }
 
   // 3. First/Last markers
-  const seenLetters = new Set();
-  for (const id of wiringOrder) {
-    const p = pixelMap[id];
-    if (!p) continue;
-    const lk = `${p.letterIndex}_${p.letter}`;
-    if (!seenLetters.has(lk + '_first') && p.isFirst) {
-      seenLetters.add(lk + '_first');
-      const dxfY = maxY - p.y;
-      lines.push(`0\nTEXT\n8\nLED_MARKERS\n10\n${p.x.toFixed(4)}\n20\n${(dxfY + radius + 2).toFixed(4)}\n30\n0.0\n40\n2.0\n1\nFIRST_${p.letter}`);
+  for (const p of pixels) {
+    const dxfY = maxY - p.y;
+    if (p.isBorderFirst) {
+      lines.push(`0\nTEXT\n8\nLED_MARKERS\n10\n${p.x.toFixed(4)}\n20\n${(dxfY + radius + 2).toFixed(4)}\n30\n0.0\n40\n2.0\n1\nBS_${p.letter}`);
     }
-    if (!seenLetters.has(lk + '_last') && p.isLast) {
-      seenLetters.add(lk + '_last');
-      const dxfY = maxY - p.y;
-      lines.push(`0\nTEXT\n8\nLED_MARKERS\n10\n${p.x.toFixed(4)}\n20\n${(dxfY - radius - 4).toFixed(4)}\n30\n0.0\n40\n2.0\n1\nLAST_${p.letter}`);
+    if (p.isBorderLast) {
+      lines.push(`0\nTEXT\n8\nLED_MARKERS\n10\n${p.x.toFixed(4)}\n20\n${(dxfY - radius - 4).toFixed(4)}\n30\n0.0\n40\n2.0\n1\nBE_${p.letter}`);
+    }
+    if (p.isFillFirst) {
+      lines.push(`0\nTEXT\n8\nLED_MARKERS\n10\n${p.x.toFixed(4)}\n20\n${(dxfY + radius + 2).toFixed(4)}\n30\n0.0\n40\n2.0\n1\nFS_${p.letter}`);
+    }
+    if (p.isFillLast) {
+      lines.push(`0\nTEXT\n8\nLED_MARKERS\n10\n${p.x.toFixed(4)}\n20\n${(dxfY - radius - 4).toFixed(4)}\n30\n0.0\n40\n2.0\n1\nFE_${p.letter}`);
     }
   }
 
-  // 4. Pixel numbers
+  // 4. Pixel numbers - use borderOrder or fillOrder
   if (includeNumbers) {
     for (const p of pixels) {
-      if (p.wiringOrder < 0) continue;
+      const num = p.type === 'border' ? p.borderOrder : p.fillOrder;
+      if (num < 1) continue;
       const dxfY = maxY - p.y;
-      lines.push(`0\nTEXT\n8\nLED_NUMBERS\n10\n${p.x.toFixed(4)}\n20\n${dxfY.toFixed(4)}\n30\n0.0\n40\n1.2\n1\n${p.wiringOrder}`);
+      lines.push(`0\nTEXT\n8\nLED_NUMBERS\n10\n${p.x.toFixed(4)}\n20\n${dxfY.toFixed(4)}\n30\n0.0\n40\n1.2\n1\n${num}`);
     }
   }
 
@@ -92,7 +122,7 @@ export function generateCJB(pixels, wiringOrder, settings = {}) {
   const pixelMap = {};
   for (const p of pixels) pixelMap[p.id] = p;
 
-  // Group by port
+  // Group by port (use port 0 for unassigned)
   const ports = {};
   for (const p of pixels) {
     const pi = Math.max(0, p.portIndex ?? 0);
@@ -116,33 +146,43 @@ export function generateCJB(pixels, wiringOrder, settings = {}) {
   for (let i = 0; i < 8; i++) {
     const portPixels = ports[i] || [];
     xml += `    <Port index="${i+1}" color="${PORT_COLORS[i]}" pixelCount="${portPixels.length}">\n`;
+    let seq = 0;
     for (const p of portPixels) {
-      xml += `      <Pixel seq="${p.portPixelIndex}" globalSeq="${p.wiringOrder}" `;
+      seq++;
+      const orderNum = p.type === 'border' ? p.borderOrder : p.fillOrder;
+      xml += `      <Pixel seq="${seq}" globalSeq="${orderNum}" `;
       xml += `x="${p.x.toFixed(3)}" y="${p.y.toFixed(3)}" `;
       xml += `type="${p.type}" letter="${escXml(p.letter)}" `;
-      xml += `isFirst="${p.isFirst}" isLast="${p.isLast}" mode="${p.isAuto ? 'auto' : 'manual'}"/>\n`;
+      xml += `isBorderFirst="${!!p.isBorderFirst}" isBorderLast="${!!p.isBorderLast}" `;
+      xml += `isFillFirst="${!!p.isFillFirst}" isFillLast="${!!p.isFillLast}"/>\n`;
     }
     xml += `    </Port>\n`;
   }
   xml += `  </Controller>\n`;
 
-  // Wiring path
+  // Wiring path by letter and type
   xml += `  <WiringPath>\n`;
-  let wiringXml = '';
-  for (let i = 0; i < wiringOrder.length; i++) {
-    const id = wiringOrder[i];
+  
+  // Group by letter and type
+  const letterTypeGroups = {};
+  for (const id of wiringOrder) {
     const p = pixelMap[id];
     if (!p) continue;
-    if (i === 0 || p.letter !== pixelMap[wiringOrder[i-1]]?.letter) {
-      if (i > 0) wiringXml += `    </Chain>\n`;
-      wiringXml += `    <Chain letter="${escXml(p.letter)}" letterIndex="${p.letterIndex}">\n`;
-    }
-    wiringXml += `      <Node seq="${i+1}" pixelId="${p.id}" x="${p.x.toFixed(3)}" y="${p.y.toFixed(3)}" `;
-    wiringXml += `port="${(p.portIndex ?? 0)+1}" portSeq="${p.portPixelIndex}" `;
-    wiringXml += `isFirst="${p.isFirst}" isLast="${p.isLast}"/>\n`;
+    const key = `${p.letterIndex}_${p.type}`;
+    if (!letterTypeGroups[key]) letterTypeGroups[key] = { letter: p.letter, letterIndex: p.letterIndex, type: p.type, pixels: [] };
+    letterTypeGroups[key].pixels.push(p);
   }
-  if (wiringOrder.length > 0) wiringXml += `    </Chain>\n`;
-  xml += wiringXml;
+  
+  for (const [key, group] of Object.entries(letterTypeGroups)) {
+    xml += `    <Chain letter="${escXml(group.letter)}" letterIndex="${group.letterIndex}" type="${group.type}">\n`;
+    group.pixels.forEach((p, i) => {
+      const orderNum = p.type === 'border' ? p.borderOrder : p.fillOrder;
+      xml += `      <Node seq="${i+1}" pixelId="${p.id}" x="${p.x.toFixed(3)}" y="${p.y.toFixed(3)}" `;
+      xml += `port="${(p.portIndex ?? 0)+1}" order="${orderNum}"/>\n`;
+    });
+    xml += `    </Chain>\n`;
+  }
+  
   xml += `  </WiringPath>\n`;
   xml += `</LEDEditProject>\n`;
 

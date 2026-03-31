@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import './App.css';
 import MenuBar from './components/MenuBar';
 import Toolbar from './components/Toolbar';
@@ -77,6 +77,23 @@ export default function App() {
   // Convert cm → mm
   const fontSizeMm = fontSizeCm * 10;
   const letterSpacingMm = letterSpacingCm * 10;
+
+  // ── Auto-load Arial Bold font on startup ──────────────────────────────────
+  useEffect(() => {
+    const loadDefaultFont = async () => {
+      try {
+        const response = await fetch('/arial-bold.ttf');
+        if (response.ok) {
+          const arrayBuffer = await response.arrayBuffer();
+          setFont(parseFont(arrayBuffer));
+          setFontName('Arial Bold');
+        }
+      } catch (e) {
+        console.log('Default font not loaded:', e.message);
+      }
+    };
+    loadDefaultFont();
+  }, []);
 
   // Computed values
   const portStats = useMemo(() => getPortStats(pixels), [pixels]);
@@ -309,14 +326,14 @@ export default function App() {
     e.preventDefault();
     const menuOptions = [];
     
+    // Connect Solid Wire option (requires 2+ selected) - Creates solid wiring between 2 pixels
+    if (selectedIds.size >= 2) {
+      menuOptions.push({ type: 'connectSolidWire' });
+    }
+    
     // Add Pixels option (requires 2+ selected)
     if (selectedIds.size >= 2) {
       menuOptions.push({ type: 'addPixels' });
-    }
-    
-    // Connect Wire option (requires 2+ selected)
-    if (selectedIds.size >= 2) {
-      menuOptions.push({ type: 'connectWire' });
     }
     
     // Disconnect Wire option (requires 1+ selected)
@@ -333,13 +350,22 @@ export default function App() {
     }
   }, [selectedIds]);
 
-  // ── Connect Wire (from context menu - NO AUTO REWIRING) ────────────────────
-  const handleConnectWire = useCallback(() => {
+  // ── Connect Solid Wire (from context menu) ─────────────────────────────────
+  // Creates a solid wiring connection between selected pixels in their current order
+  const handleConnectSolidWire = useCallback(() => {
     if (selectedIds.size < 2) return;
     
-    // Just clear broken wiring for selected pixels - preserve user's order
+    // Get selected pixels in wiring order
+    const selectedInOrder = wiringOrder
+      .filter(id => selectedIds.has(id))
+      .map(id => pixels.find(p => p.id === id))
+      .filter(Boolean);
+    
+    if (selectedInOrder.length < 2) return;
+    
+    // Clear broken wiring for selected pixels and mark them as solid-connected
     const updatedPixels = pixels.map(p => 
-      selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p
+      selectedIds.has(p.id) ? { ...p, wiringBroken: false, solidWire: true } : p
     );
     
     setPixels(updatedPixels);
@@ -634,7 +660,7 @@ export default function App() {
           y={contextMenu.y}
           options={contextMenu.options || [{ type: 'addPixels' }]}
           onAddPixels={handleAddMultiplePixels}
-          onConnectWire={handleConnectWire}
+          onConnectSolidWire={handleConnectSolidWire}
           onDisconnectWire={handleDisconnectWire}
           onClose={() => setContextMenu(null)}
         />
@@ -644,7 +670,7 @@ export default function App() {
 }
 
 // Context Menu Component
-function ContextMenuPopup({ x, y, options, onAddPixels, onConnectWire, onDisconnectWire, onClose }) {
+function ContextMenuPopup({ x, y, options, onAddPixels, onConnectSolidWire, onDisconnectWire, onClose }) {
   const [count, setCount] = useState(1);
   const [showAddInput, setShowAddInput] = useState(false);
   
@@ -662,6 +688,17 @@ function ContextMenuPopup({ x, y, options, onAddPixels, onConnectWire, onDisconn
       style={{ left: x, top: y }}
       onClick={e => e.stopPropagation()}
     >
+      {hasOption('connectSolidWire') && (
+        <button 
+          className="context-menu-item"
+          onClick={onConnectSolidWire}
+          data-testid="ctx-connect-solid-wire"
+        >
+          <span className="ctx-icon">━</span>
+          Connect Solid Wire
+        </button>
+      )}
+      
       {hasOption('addPixels') && !showAddInput && (
         <button 
           className="context-menu-item"
@@ -686,17 +723,6 @@ function ContextMenuPopup({ x, y, options, onAddPixels, onConnectWire, onDisconn
           />
           <button type="submit">Add</button>
         </form>
-      )}
-      
-      {hasOption('connectWire') && (
-        <button 
-          className="context-menu-item"
-          onClick={onConnectWire}
-          data-testid="ctx-connect-wire"
-        >
-          <span className="ctx-icon">⎯</span>
-          Connect Wire
-        </button>
       )}
       
       {hasOption('disconnectWire') && (
