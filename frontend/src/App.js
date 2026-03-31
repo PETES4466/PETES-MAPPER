@@ -36,6 +36,7 @@ export default function App() {
 
   // ── Wiring ───────────────────────────────────────────────────────────────
   const [wiringDirection, setWiringDirection] = useState('ltr-ttb');
+  const [wiringMode, setWiringMode] = useState('auto'); // 'auto' = port first, 'layout' = port later
 
   // ── Tools & UI ───────────────────────────────────────────────────────────
   const [activeTool, setActiveTool] = useState('select');
@@ -585,14 +586,12 @@ export default function App() {
           onFillSpacingChange={setFillSpacingMm}
           borderSpacingMm={borderSpacingMm}
           onBorderSpacingChange={setBorderSpacingMm}
-          borderPixelCount={borderPixelCount}
-          onBorderPixelCountChange={setBorderPixelCount}
           pixelOdMm={pixelOdMm}
           onPixelOdChange={setPixelOdMm}
           edgeMarginMm={edgeMarginMm}
           onEdgeMarginChange={setEdgeMarginMm}
-          wiringDirection={wiringDirection}
-          onWiringDirectionChange={setWiringDirection}
+          wiringMode={wiringMode}
+          onWiringModeChange={setWiringMode}
           isCollapsed={propertiesCollapsed}
           onToggleCollapse={() => setPropertiesCollapsed(!propertiesCollapsed)}
         />
@@ -630,12 +629,9 @@ export default function App() {
         {/* Ports Panel */}
         <PortsPanel
           pixels={pixels}
-          portNodes={portNodes}
-          letterPortMap={letterPortMap}
           visiblePorts={visiblePorts}
           selectedPortIndex={selectedPortIndex}
           onSelectPort={handleSelectPort}
-          text={text}
           exportFormat={exportFormat}
           onExportFormatChange={setExportFormat}
           onExport={handleExport}
