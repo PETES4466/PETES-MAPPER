@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, X } from 'lucide-react';
-import { PORT_COLORS, PORT_PIXEL_LIMIT } from '../utils/wireUtils';
+import { CONTROLLERS, PORTS, getPortById, PORT_PIXEL_LIMIT } from '../utils/wireUtils';
 
 // Default fonts available in the app
 export const DEFAULT_FONTS = [
@@ -37,8 +37,8 @@ export default function MenuBar({
   text, onTextChange,
   // Generate
   canGenerate, onGenerate, isGenerating,
-  // Ports (new)
-  activePort, onActivePortChange, portStats
+  // Ports
+  activePortId, onActivePortChange, activeController, portStats
 }) {
   const [openMenu, setOpenMenu] = useState(null);
   const [showFontDialog, setShowFontDialog] = useState(false);
@@ -193,51 +193,41 @@ export default function MenuBar({
           >
             <span 
               className="port-indicator" 
-              style={{ backgroundColor: activePort !== null ? PORT_COLORS[activePort] : 'var(--text-muted)' }}
+              style={{ backgroundColor: activePortId ? getPortById(activePortId)?.color : 'var(--text-muted)' }}
             />
             <span className="port-label">
-              {activePort !== null ? `P${activePort + 1}` : 'Port'}
+              {activePortId ? getPortById(activePortId)?.name : 'Port'}
             </span>
             <span className="port-count-display">
-              ({portStats?.stats?.[activePort]?.count ?? 0}/{PORT_PIXEL_LIMIT})
+              ({portStats?.stats?.[activePortId]?.count ?? 0}/{PORT_PIXEL_LIMIT})
             </span>
             <ChevronDown size={12} />
           </button>
           {showPortDropdown && (
             <div className="port-dropdown-menu">
-              {Array.from({ length: 8 }, (_, i) => {
-                const count = portStats?.stats?.[i]?.count ?? 0;
-                const isActive = activePort === i;
-                return (
-                  <button
-                    key={i}
-                    className={`port-dropdown-item ${isActive ? 'active' : ''}`}
-                    onClick={() => {
-                      onActivePortChange?.(i);
-                      setShowPortDropdown(false);
-                    }}
-                    data-testid={`port-select-${i+1}`}
-                  >
-                    <span 
-                      className="port-color-dot" 
-                      style={{ backgroundColor: PORT_COLORS[i] }}
-                    />
-                    <span className="port-name">P{i + 1}</span>
-                    <span className="port-stats">
-                      {count}/{PORT_PIXEL_LIMIT}
-                    </span>
-                    <div className="port-progress">
-                      <div 
-                        className="port-progress-fill"
-                        style={{ 
-                          width: `${Math.min(100, (count / PORT_PIXEL_LIMIT) * 100)}%`,
-                          backgroundColor: count > PORT_PIXEL_LIMIT ? '#ff4444' : PORT_COLORS[i]
+              {CONTROLLERS.map(ctrl => (
+                <div key={ctrl.id} className="port-dropdown-group">
+                  <div className="port-group-header">{ctrl.id} ({ctrl.key})</div>
+                  {PORTS.filter(p => p.controller === ctrl.id).map(port => {
+                    const count = portStats?.stats?.[port.id]?.count ?? 0;
+                    const isActive = activePortId === port.id;
+                    return (
+                      <button
+                        key={port.id}
+                        className={`port-dropdown-item ${isActive ? 'active' : ''}`}
+                        onClick={() => {
+                          onActivePortChange?.(port.id);
+                          setShowPortDropdown(false);
                         }}
-                      />
-                    </div>
-                  </button>
-                );
-              })}
+                      >
+                        <span className="port-color-dot" style={{ backgroundColor: port.color }} />
+                        <span className="port-name">{port.name}</span>
+                        <span className="port-stats">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           )}
         </div>

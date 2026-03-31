@@ -8,7 +8,7 @@ import PortsPanel from './components/PortsPanel';
 import StatusPanel from './components/StatusPanel';
 import { parseFont, getGlyphPathMm, getAdvanceWidth } from './utils/fontParser';
 import { generatePixelsForText, buildPixelObjects } from './utils/pixelUtils';
-import { autoSnakeWiringPerLetter, getPortStats, buildInitialPortNodes, renumberPixelsInOrder } from './utils/wireUtils';
+import { autoSnakeWiringPerLetter, getPortStats, buildInitialPortNodes, renumberPixelsInOrder, CONTROLLERS, PORTS, getPortById } from './utils/wireUtils';
 import { generateDXF, generateCJB, downloadFile } from './utils/exportUtils';
 
 const MAX_HISTORY = 10;
@@ -53,7 +53,12 @@ export default function App() {
   const [letterPortMap, setLetterPortMap] = useState({});
   const [visiblePorts, setVisiblePorts] = useState(new Set());
   const [selectedPortIndex, setSelectedPortIndex] = useState(null);
-  const [activePort, setActivePort] = useState(0); // Currently active port in dropdown
+  const [activePortId, setActivePortId] = useState(1); // Currently active port ID (1-32)
+  const [activeController, setActiveController] = useState('A'); // Currently active controller
+
+  // ── Path Tool State ────────────────────────────────────────────────────────
+  const [pathPoints, setPathPoints] = useState([]);
+  const [pathComplete, setPathComplete] = useState(false);
 
   // ── Wire Connect Tool ────────────────────────────────────────────────────
   const [wireConnectStart, setWireConnectStart] = useState(null);
@@ -99,6 +104,63 @@ export default function App() {
     };
     loadDefaultFont();
   }, []);
+
+  // ── Keyboard Shortcuts for Controllers (Q,W,E,R) and Ports (1-8) ───────────
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if typing in input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      
+      const key = e.key.toUpperCase();
+      
+      // Controller shortcuts: Q, W, E, R
+      if (key === 'Q') {
+        setActiveController('A');
+        setActivePortId(1); // First port of controller A
+        setActiveTool('place');
+      } else if (key === 'W') {
+        setActiveController('B');
+        setActivePortId(9); // First port of controller B
+        setActiveTool('place');
+      } else if (key === 'E') {
+        setActiveController('C');
+        setActivePortId(17); // First port of controller C
+        setActiveTool('place');
+      } else if (key === 'R') {
+        setActiveController('D');
+        setActivePortId(25); // First port of controller D
+        setActiveTool('place');
+      }
+      
+      // Port shortcuts: 1-8 (within active controller)
+      if (e.key >= '1' && e.key <= '8') {
+        const portNum = Number(e.key);
+        const ctrl = CONTROLLERS.find(c => c.id === activeController);
+        if (ctrl) {
+          const portId = ctrl.ports[portNum - 1];
+          setActivePortId(portId);
+          setActiveTool('place');
+        }
+      }
+      
+      // Tool shortcuts
+      if (key === 'V') setActiveTool('select');
+      if (key === 'H') setActiveTool('pan');
+      if (key === 'P') setActiveTool('path');
+      
+      // Delete
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedIds.size > 0) {
+          e.preventDefault();
+          handleDelete();
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeController, selectedIds]);
 
   // Computed values
   const portStats = useMemo(() => getPortStats(pixels), [pixels]);
@@ -562,8 +624,9 @@ export default function App() {
         canGenerate={canGenerate}
         onGenerate={handleGenerate}
         isGenerating={isGenerating}
-        activePort={activePort}
-        onActivePortChange={handleActivePortChange}
+        activePortId={activePortId}
+        onActivePortChange={setActivePortId}
+        activeController={activeController}
         portStats={portStats}
       />
 
@@ -642,11 +705,11 @@ export default function App() {
         {/* Ports Panel */}
         <PortsPanel
           pixels={pixels}
-          visiblePorts={visiblePorts}
-          selectedPortIndex={selectedPortIndex}
-          onSelectPort={handleSelectPort}
+          activePortId={activePortId}
+          onSelectPort={setActivePortId}
+          activeController={activeController}
+          onSelectController={setActiveController}
           exportFormat={exportFormat}
-          onExportFormatChange={setExportFormat}
           onExport={handleExport}
           isCollapsed={portsCollapsed}
           onToggleCollapse={() => setPortsCollapsed(!portsCollapsed)}
@@ -660,6 +723,8 @@ export default function App() {
         activeTool={activeTool}
         wireConnectStart={wireConnectStart}
         portStats={portStats}
+        activePortId={activePortId}
+        activeController={activeController}
       />
 
       {/* Context Menu */}

@@ -1,19 +1,31 @@
-import React from 'react';
-import { Eye, EyeOff, Download } from 'lucide-react';
-import { PORT_COLORS, getPortStats, PORT_PIXEL_LIMIT } from '../utils/wireUtils';
+import React, { useState } from 'react';
+import { Download, ChevronDown, ChevronRight } from 'lucide-react';
+import { CONTROLLERS, PORTS, getPortsForController, PORT_PIXEL_LIMIT } from '../utils/wireUtils';
 
 export default function PortsPanel({
   pixels,
-  visiblePorts,
-  selectedPortIndex,
+  activePortId,
   onSelectPort,
+  activeController,
+  onSelectController,
   exportFormat,
-  onExportFormatChange,
   onExport,
   isCollapsed,
   onToggleCollapse
 }) {
-  const portStats = getPortStats(pixels);
+  const [expandedControllers, setExpandedControllers] = useState({ A: true, B: false, C: false, D: false });
+
+  // Count pixels per port
+  const portCounts = {};
+  PORTS.forEach(p => { portCounts[p.id] = 0; });
+  pixels.forEach(p => {
+    const pid = p.portId || 1;
+    if (portCounts[pid] !== undefined) portCounts[pid]++;
+  });
+
+  const toggleController = (cid) => {
+    setExpandedControllers(prev => ({ ...prev, [cid]: !prev[cid] }));
+  };
 
   if (isCollapsed) {
     return (
@@ -26,38 +38,64 @@ export default function PortsPanel({
   return (
     <div className="ports-panel">
       <div className="panel-header">
-        <span>Port</span>
+        <span>Ports</span>
         <button className="collapse-btn" onClick={onToggleCollapse}>✕</button>
       </div>
 
       <div className="panel-scroll">
-        {/* Stats */}
+        {/* Total */}
         <div className="ports-section compact">
-          <div className="stat-mini">T:{portStats.totalPixels}</div>
+          <div className="stat-mini">Total: {pixels.length}</div>
         </div>
 
-        {/* Ports - compact */}
-        <div className="ports-section">
-          {portStats.stats.map((s, i) => {
-            const isVisible = visiblePorts?.has(i) || false;
-            const isSelected = selectedPortIndex === i;
-            return (
-              <button
-                key={i}
-                className={`port-btn-mini ${isVisible ? 'vis' : ''} ${isSelected ? 'sel' : ''}`}
-                style={{ borderColor: isVisible ? PORT_COLORS[i] : 'transparent' }}
-                onClick={() => onSelectPort?.(i)}
-                data-testid={`port-${i+1}`}
+        {/* Controllers */}
+        {CONTROLLERS.map(ctrl => {
+          const ctrlPorts = getPortsForController(ctrl.id);
+          const isExpanded = expandedControllers[ctrl.id];
+          const ctrlTotal = ctrlPorts.reduce((sum, p) => sum + (portCounts[p.id] || 0), 0);
+          
+          return (
+            <div key={ctrl.id} className="controller-section">
+              <button 
+                className={`controller-header ${activeController === ctrl.id ? 'active' : ''}`}
+                onClick={() => {
+                  toggleController(ctrl.id);
+                  onSelectController?.(ctrl.id);
+                }}
               >
-                <span className="port-dot" style={{ background: PORT_COLORS[i] }} />
-                <span>{i+1}</span>
-                <span className="cnt">{s.count}</span>
+                {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                <span className="ctrl-key">{ctrl.key}</span>
+                <span className="ctrl-name">{ctrl.id}</span>
+                <span className="ctrl-count">{ctrlTotal}</span>
               </button>
-            );
-          })}
-        </div>
+              
+              {isExpanded && (
+                <div className="controller-ports">
+                  {ctrlPorts.map(port => {
+                    const count = portCounts[port.id] || 0;
+                    const isActive = activePortId === port.id;
+                    const isOverflow = count > PORT_PIXEL_LIMIT;
+                    
+                    return (
+                      <button
+                        key={port.id}
+                        className={`port-btn-mini ${isActive ? 'active' : ''} ${isOverflow ? 'overflow' : ''}`}
+                        onClick={() => onSelectPort?.(port.id)}
+                        title={`${port.name}: ${count}/${PORT_PIXEL_LIMIT}`}
+                      >
+                        <span className="port-dot" style={{ background: port.color }} />
+                        <span className="port-num">{port.id % 8 || 8}</span>
+                        <span className="port-cnt">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
 
-        {/* Export - compact */}
+        {/* Export */}
         <div className="ports-section">
           <button className="exp-btn" onClick={onExport} disabled={pixels.length === 0}>
             <Download size={10} />
