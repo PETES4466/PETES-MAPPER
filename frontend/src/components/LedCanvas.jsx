@@ -181,16 +181,17 @@ const LedCanvas = forwardRef(function LedCanvas({
       ctx.restore();
     }
 
-    // ── Wiring (dotted red = recommendation, solid = user confirmed) ────────
+    // ── Wiring (simplified - dotted red lines) ────────────────────────────────
     if (showWireRef.current && pixels.length > 1) {
       const wOrder = wiringRef.current;
       const pmap = buildMap(pixels);
       ctx.save();
+      ctx.strokeStyle = WIRING_COLOR;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
       
       let prevBroken = false;
-      let prevSolid = false;
-      
-      // Draw in segments - solid for confirmed, dotted for recommendation
       for (let i = 0; i < wOrder.length; i++) {
         const id = wOrder[i];
         const p = pmap[id];
@@ -201,40 +202,13 @@ const LedCanvas = forwardRef(function LedCanvas({
         const { sx, sy } = toScreen(px, py);
         
         if (i === 0 || prevBroken) {
-          ctx.beginPath();
           ctx.moveTo(sx, sy);
         } else {
-          // Determine line style based on solidWire flag
-          const isSolid = p.solidWire || false;
-          
-          if (isSolid !== prevSolid && i > 0) {
-            // Style changed, stroke current path and start new
-            ctx.stroke();
-            ctx.beginPath();
-            // Get previous point
-            const prevP = pmap[wOrder[i-1]];
-            if (prevP) {
-              const prevPx = livePixelRef.current[prevP.id]?.x ?? prevP.x;
-              const prevPy = livePixelRef.current[prevP.id]?.y ?? prevP.y;
-              const { sx: psx, sy: psy } = toScreen(prevPx, prevPy);
-              ctx.moveTo(psx, psy);
-            }
-          }
-          
-          ctx.strokeStyle = isSolid ? '#00ff88' : WIRING_COLOR; // Green for solid, red for dotted
-          ctx.lineWidth = isSolid ? 2.5 : 2;
-          ctx.setLineDash(isSolid ? [] : [6, 4]);
           ctx.lineTo(sx, sy);
-          prevSolid = isSolid;
         }
-        
         prevBroken = p.wiringBroken ?? false;
-        
-        if (prevBroken || i === wOrder.length - 1) {
-          ctx.stroke();
-        }
       }
-      
+      ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
     }
