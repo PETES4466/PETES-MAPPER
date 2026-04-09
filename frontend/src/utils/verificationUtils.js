@@ -1,4 +1,28 @@
 import { PORT_COUNT, PORT_PIXEL_LIMIT, assignPortsWithLetterMap } from './wireUtils';
+const CLOSED_LETTERS = new Set(['O', 'D', 'P', 'Q', 'R', 'B', '0', '6', '8', '9']);
+
+function dist(a, b) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+}
+
+function getTypicalSpacing(pixels) {
+  if (pixels.length < 2) return 15;
+  let total = 0;
+  let count = 0;
+  const sample = pixels.slice(0, Math.min(40, pixels.length));
+  for (let i = 0; i < sample.length; i++) {
+    let minD = Infinity;
+    for (let j = 0; j < sample.length; j++) {
+      if (i === j) continue;
+      minD = Math.min(minD, dist(sample[i], sample[j]));
+    }
+    if (Number.isFinite(minD)) {
+      total += minD;
+      count += 1;
+    }
+  }
+  return count > 0 ? total / count : 15;
+}
 
 function groupPixelsByLetterAndType(pixels) {
   const keys = new Set();
@@ -105,6 +129,11 @@ export function verifyLedEditLayout(pixels, wiringOrder, letterPortMap) {
         break;
       }
     }
+
+    const fillLetters = new Set(items.filter(p => p.type === 'fill').map(p => p.letterIndex ?? 0));
+    if (fillLetters.size > 1) {
+      errors.push(`P${i + 1} has fill pixels from multiple letters. Keep one letter fill per port to avoid carry-over.`);
+    }
   }
 
   const seenPerPort = Array.from({ length: PORT_COUNT }, () => 0);
@@ -117,6 +146,32 @@ export function verifyLedEditLayout(pixels, wiringOrder, letterPortMap) {
         `Wiring/port mismatch on P${p.portIndex + 1}: expected ${seenPerPort[p.portIndex]}, got ${p.portPixelIndex}.`
       );
       break;
+    }
+  }
+
+  const pixelById = new Map(exportPixels.map(p => [p.id, p]));
+  const closedFillPixels = exportPixels.filter(
+    p => p.type === 'fill' && CLOSED_LETTERS.has(String(p.letter || '').toUpperCase())
+  );
+  const closedSpacing = getTypicalSpacing(closedFillPixels);
+  const maxJump = Math.max(10, closedSpacing * 2.3);
+  for (let i = 1; i < wiringOrder.length; i++) {
+    const prev = pixelById.get(wiringOrder[i - 1]);
+    const next = pixelById.get(wiringOrder[i]);
+    if (!prev || !next) continue;
+    if (
+      prev.type === 'fill' &&
+      next.type === 'fill' &&
+      (prev.letterIndex ?? 0) === (next.letterIndex ?? 0) &&
+      CLOSED_LETTERS.has(String(prev.letter || '').toUpperCase())
+    ) {
+      const d = dist(prev, next);
+      if (d > maxJump) {
+        errors.push(
+          `Long jump detected in closed fill flow for letter "${prev.letter}" near node ${i}: ${d.toFixed(1)}mm.`
+        );
+        break;
+      }
     }
   }
 

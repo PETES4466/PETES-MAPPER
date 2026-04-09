@@ -18,6 +18,7 @@ export const LETTER_COLORS = [
 
 export const PORT_PIXEL_LIMIT = 1024;
 export const PORT_COUNT = 8;
+const CLOSED_LETTERS = new Set(['O', 'D', 'P', 'Q', 'R', 'B', '0', '6', '8', '9']);
 
 function dist(a, b) {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
@@ -133,6 +134,132 @@ function getTypicalSpacing(pixels) {
   return count > 0 ? total / count : 15;
 }
 
+function isClosedLetterPixel(pixel) {
+  const ch = String(pixel?.letter || '').toUpperCase();
+  return CLOSED_LETTERS.has(ch);
+}
+
+function getBottomStartPixel(pixels) {
+  if (!pixels.length) return null;
+  const centerX = pixels.reduce((sum, p) => sum + p.x, 0) / pixels.length;
+  const sorted = [...pixels].sort((a, b) => {
+    if (b.y !== a.y) return b.y - a.y; // bottom-most first
+    return Math.abs(a.x - centerX) - Math.abs(b.x - centerX);
+  });
+  return sorted[0] || null;
+}
+
+function rotateFromStart(items, startId) {
+  if (!items.length || !startId) return items;
+  const idx = items.findIndex(p => p.id === startId);
+  if (idx <= 0) return items;
+  return [...items.slice(idx), ...items.slice(0, idx)];
+}
+
+function sortRingByAngle(ring, center, direction = 'cw') {
+  const sorted = [...ring].sort((a, b) => {
+    const aa = Math.atan2(a.y - center.y, a.x - center.x);
+    const bb = Math.atan2(b.y - center.y, b.x - center.x);
+    return direction === 'ccw' ? aa - bb : bb - aa;
+  });
+  return sorted;
+}
+
+function clusterByRadius(pixels, center, bucketSize) {
+  const radii = pixels
+    .map(p => ({ p, r: dist(p, center) }))
+    .sort((a, b) => b.r - a.r); // outside -> inside
+  const rings = [];
+  for (const entry of radii) {
+    const last = rings[rings.length - 1];
+    if (!last || Math.abs(last.mean - entry.r) > bucketSize) {
+      rings.push({ mean: entry.r, values: [entry.p] });
+    } else {
+      last.values.push(entry.p);
+      last.mean = (last.mean * (last.values.length - 1) + entry.r) / last.values.length;
+    }
+  }
+  return rings.map(r => r.values);
+}
+
+function nearestValidNeighbor(current, candidates, letterPixels, maxStep) {
+  let best = null;
+  let bestScore = Infinity;
+  for (const p of candidates) {
+    const d = dist(current, p);
+    if (d > maxStep) continue;
+    if (lineIntersectsEmptySpace(current, p, letterPixels, current.letterIndex ?? 0, maxStep * 0.8)) continue;
+    if (d < bestScore) {
+      best = p;
+      bestScore = d;
+    }
+  }
+  return best;
+}
+
+function stitchWithoutLongJumps(proposedOrder, letterPixels, maxStep) {
+  if (!proposedOrder.length) return [];
+  const remaining = new Map(proposedOrder.map(p => [p.id, p]));
+  const path = [];
+  let current = proposedOrder[0];
+  path.push(current);
+  remaining.delete(current.id);
+
+  while (remaining.size) {
+    const candidateList = proposedOrder.filter(p => remaining.has(p.id));
+    let next = nearestValidNeighbor(current, candidateList, letterPixels, maxStep);
+
+    if (!next) {
+      // Fallback: nearest remaining (keeps sequence complete, verification will still catch this if needed)
+      next = candidateList.reduce((best, p) => (!best || dist(current, p) < dist(current, best) ? p : best), null);
+    }
+    if (!next) break;
+    path.push(next);
+    remaining.delete(next.id);
+    current = next;
+  }
+  return path;
+}
+
+function buildClosedLoopFillOrder(fillPixels, flowMode = 'zigzag', flowDirection = 'cw') {
+  if (fillPixels.length <= 1) return fillPixels;
+  const spacing = getTypicalSpacing(fillPixels);
+  const center = {
+    x: fillPixels.reduce((sum, p) => sum + p.x, 0) / fillPixels.length,
+    y: fillPixels.reduce((sum, p) => sum + p.y, 0) / fillPixels.length
+  };
+
+  const rings = clusterByRadius(fillPixels, center, Math.max(3, spacing * 0.7));
+  const start = getBottomStartPixel(fillPixels);
+  const proposed = [];
+
+  if (flowMode === 'loop') {
+    for (const ring of rings) {
+      let ordered = sortRingByAngle(ring, center, flowDirection);
+      const ringStart = proposed.length === 0 ? start?.id : proposed[proposed.length - 1]?.id;
+      ordered = rotateFromStart(ordered, ringStart);
+      proposed.push(...ordered);
+    }
+  } else {
+    // Zig-zag (serpentine) across radial bands, alternating outer->inner and inner->outer
+    const maxRingLen = Math.max(...rings.map(r => r.length));
+    for (let i = 0; i < maxRingLen; i++) {
+      const ringIndices = i % 2 === 0 ? [...rings.keys()] : [...rings.keys()].reverse();
+      for (const ri of ringIndices) {
+        const ring = sortRingByAngle(rings[ri], center, flowDirection);
+        if (i < ring.length) proposed.push(ring[i]);
+      }
+    }
+    const withStart = rotateFromStart(proposed, start?.id);
+    const maxStep = Math.max(10, spacing * 2.2);
+    return stitchWithoutLongJumps(withStart, fillPixels, maxStep);
+  }
+
+  const withStart = rotateFromStart(proposed, start?.id);
+  const maxStep = Math.max(10, spacing * 2.2);
+  return stitchWithoutLongJumps(withStart, fillPixels, maxStep);
+}
+
 function clusterRows(pixels, threshold) {
   const rows = new Map();
   for (const p of pixels) {
@@ -211,8 +338,12 @@ function ensureStartEndSpacing(orderedPixels, minSpacing) {
 //   - Border pixels: numbered 1 to N with borderFirst/borderLast markers
 //   - Fill pixels: numbered 1 to M with fillFirst/fillLast markers
 // Uses nearest neighbor algorithm to stay within letter boundaries
-export function autoSnakeWiringPerLetter(pixels, direction = 'ltr-ttb', minSpacing = 12) {
+export function autoSnakeWiringPerLetter(pixels, direction = 'ltr-ttb', minSpacing = 12, options = {}) {
   if (!pixels.length) return { wiredPixels: [], wiringOrder: [] };
+  const {
+    fillFlowMode = 'zigzag',
+    fillFlowDirection = 'cw'
+  } = options;
 
   // Group by letter
   const byLetter = {};
@@ -256,8 +387,13 @@ export function autoSnakeWiringPerLetter(pixels, direction = 'ltr-ttb', minSpaci
     
     // Process fill pixels using nearest neighbor
     if (fill.length > 0) {
-      let orderedFill = nearestNeighborWiring(pixels, letterIdx, 'fill');
-      if (orderedFill.length === 0) orderedFill = smartSnakeFill(fill, direction);
+      let orderedFill;
+      if (fill.some(isClosedLetterPixel)) {
+        orderedFill = buildClosedLoopFillOrder(fill, fillFlowMode, fillFlowDirection);
+      } else {
+        orderedFill = nearestNeighborWiring(pixels, letterIdx, 'fill');
+        if (orderedFill.length === 0) orderedFill = smartSnakeFill(fill, direction);
+      }
       orderedFill = ensureStartEndSpacing(orderedFill, minSpacing);
       
       orderedFill.forEach((p, idx) => {

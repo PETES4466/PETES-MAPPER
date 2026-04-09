@@ -37,6 +37,8 @@ export default function App() {
 
   // ── Wiring ───────────────────────────────────────────────────────────────
   const [wiringDirection, setWiringDirection] = useState('ltr-ttb');
+  const [fillFlowMode, setFillFlowMode] = useState('zigzag');
+  const [fillFlowDirection, setFillFlowDirection] = useState('cw');
 
   // ── Tools & UI ───────────────────────────────────────────────────────────
   const [activeTool, setActiveTool] = useState('select');
@@ -148,7 +150,7 @@ export default function App() {
       }
       setGuideCommands(guides);
 
-      const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(base, wiringDirection, edgeMarginMm);
+      const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(base, wiringDirection, edgeMarginMm, { fillFlowMode, fillFlowDirection });
       setPixels(wiredPixels);
       setWiringOrder(order);
       setSelectedIds(new Set());
@@ -161,16 +163,16 @@ export default function App() {
     } finally {
       setIsGenerating(false);
     }
-  }, [font, text, fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm, pixelOdMm, wiringDirection, saveToHistory]);
+  }, [font, text, fontSizeMm, letterSpacingMm, mode, borderSpacingMm, borderPixelCount, fillSpacingMm, edgeMarginMm, pixelOdMm, wiringDirection, fillFlowMode, fillFlowDirection, saveToHistory]);
 
   // ── Re-Wire ──────────────────────────────────────────────────────────────
   const handleReWire = useCallback(() => {
     if (!pixels.length) return;
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(pixels, wiringDirection, edgeMarginMm);
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(pixels, wiringDirection, edgeMarginMm, { fillFlowMode, fillFlowDirection });
     setPixels(wiredPixels);
     setWiringOrder(order);
     saveToHistory(wiredPixels, order);
-  }, [pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+  }, [pixels, wiringDirection, edgeMarginMm, fillFlowMode, fillFlowDirection, saveToHistory]);
 
   // ── Pixel Select ─────────────────────────────────────────────────────────
   const handlePixelSelect = useCallback((ids, multi = false) => {
@@ -238,23 +240,23 @@ export default function App() {
     
     // Insert new pixels into the array and rewire
     const allPixels = [...pixels, ...newPixels];
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(allPixels, wiringDirection, edgeMarginMm);
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(allPixels, wiringDirection, edgeMarginMm, { fillFlowMode, fillFlowDirection });
     setPixels(wiredPixels);
     setWiringOrder(order);
     setSelectedIds(new Set(newPixels.map(p => p.id)));
     saveToHistory(wiredPixels, order);
-  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, fillFlowMode, fillFlowDirection, saveToHistory]);
 
   // ── Delete ───────────────────────────────────────────────────────────────
   const handleDelete = useCallback(() => {
     if (!selectedIds.size) return;
     const remaining = pixels.filter(p => !selectedIds.has(p.id));
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(remaining, wiringDirection, edgeMarginMm);
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(remaining, wiringDirection, edgeMarginMm, { fillFlowMode, fillFlowDirection });
     setPixels(wiredPixels);
     setWiringOrder(order);
     setSelectedIds(new Set());
     saveToHistory(wiredPixels, order);
-  }, [selectedIds, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+  }, [selectedIds, pixels, wiringDirection, edgeMarginMm, fillFlowMode, fillFlowDirection, saveToHistory]);
 
   // ── Break Wire (disconnect selected pixel from next) ─────────────────────
   const handleBreakWire = useCallback(() => {
@@ -283,11 +285,11 @@ export default function App() {
     );
     
     // Rewire to renumber
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(updatedPixels, wiringDirection, edgeMarginMm);
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(updatedPixels, wiringDirection, edgeMarginMm, { fillFlowMode, fillFlowDirection });
     setPixels(wiredPixels);
     setWiringOrder(order);
     saveToHistory(wiredPixels, order);
-  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, fillFlowMode, fillFlowDirection, saveToHistory]);
 
   // ── Wire Connect Tool ────────────────────────────────────────────────────
   const handleWireConnectClick = useCallback((pixelId) => {
@@ -339,12 +341,12 @@ export default function App() {
       selectedIds.has(p.id) ? { ...p, wiringBroken: false } : p
     );
     
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(updatedPixels, wiringDirection, edgeMarginMm);
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(updatedPixels, wiringDirection, edgeMarginMm, { fillFlowMode, fillFlowDirection });
     setPixels(wiredPixels);
     setWiringOrder(order);
     saveToHistory(wiredPixels, order);
     setContextMenu(null);
-  }, [selectedIds, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+  }, [selectedIds, pixels, wiringDirection, edgeMarginMm, fillFlowMode, fillFlowDirection, saveToHistory]);
 
   // ── Disconnect Wire (from context menu) ───────────────────────────────────
   const handleDisconnectWire = useCallback(() => {
@@ -398,13 +400,13 @@ export default function App() {
     }
     
     const allPixels = [...pixels, ...newPixels];
-    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(allPixels, wiringDirection, edgeMarginMm);
+    const { wiredPixels, wiringOrder: order } = autoSnakeWiringPerLetter(allPixels, wiringDirection, edgeMarginMm, { fillFlowMode, fillFlowDirection });
     setPixels(wiredPixels);
     setWiringOrder(order);
     setSelectedIds(new Set(newPixels.map(p => p.id)));
     saveToHistory(wiredPixels, order);
     setContextMenu(null);
-  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, saveToHistory]);
+  }, [selectedIds, wiringOrder, pixels, wiringDirection, edgeMarginMm, fillFlowMode, fillFlowDirection, saveToHistory]);
 
   // ── Port Selection (from dropdown) ─────────────────────────────────────────
   const handleActivePortChange = useCallback((portIndex) => {
@@ -564,6 +566,10 @@ export default function App() {
           onEdgeMarginChange={setEdgeMarginMm}
           wiringDirection={wiringDirection}
           onWiringDirectionChange={setWiringDirection}
+          fillFlowMode={fillFlowMode}
+          onFillFlowModeChange={setFillFlowMode}
+          fillFlowDirection={fillFlowDirection}
+          onFillFlowDirectionChange={setFillFlowDirection}
           isCollapsed={propertiesCollapsed}
           onToggleCollapse={() => setPropertiesCollapsed(!propertiesCollapsed)}
         />

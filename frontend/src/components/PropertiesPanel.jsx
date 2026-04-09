@@ -31,6 +31,8 @@ export default function PropertiesPanel({
   pixelOdMm, onPixelOdChange,
   edgeMarginMm, onEdgeMarginChange,
   wiringDirection, onWiringDirectionChange,
+  fillFlowMode, onFillFlowModeChange,
+  fillFlowDirection, onFillFlowDirectionChange,
   isCollapsed, onToggleCollapse
 }) {
   if (isCollapsed) {
@@ -171,6 +173,28 @@ export default function PropertiesPanel({
               <option value="rtl-ttb">Right→Left, Top→Bottom</option>
               <option value="ltr-btt">Left→Right, Bottom→Top</option>
               <option value="rtl-btt">Right→Left, Bottom→Top</option>
+            </select>
+          </div>
+          <div className="prop-row">
+            <label>Closed Fill Path</label>
+            <select
+              value={fillFlowMode}
+              onChange={(e) => onFillFlowModeChange(e.target.value)}
+              className="prop-select"
+            >
+              <option value="zigzag">Zig-Zag (serpentine)</option>
+              <option value="loop">Full Loop (ring-by-ring)</option>
+            </select>
+          </div>
+          <div className="prop-row">
+            <label>Closed Fill Rotation</label>
+            <select
+              value={fillFlowDirection}
+              onChange={(e) => onFillFlowDirectionChange(e.target.value)}
+              className="prop-select"
+            >
+              <option value="cw">Clockwise</option>
+              <option value="ccw">Counter-clockwise</option>
             </select>
           </div>
         </CollapsibleSection>
