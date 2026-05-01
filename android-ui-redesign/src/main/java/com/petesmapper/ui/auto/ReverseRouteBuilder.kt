@@ -15,17 +15,17 @@ class ReverseRouteBuilder {
     fun buildRoutePlan(
         stripPathModel: StripPathModel,
         pixelNodeMap: PixelNodeMap,
-        flowDirectionModel: FlowDirectionModel,
+        correctedFlowModel: CorrectedFlowModel,
     ): RoutePlan {
-        val orderedPixels = orderByFlow(pixelNodeMap.nodes, flowDirectionModel.flowDirection)
+        val orderedPixels = orderByFlow(pixelNodeMap.nodes, correctedFlowModel.flowDirection)
         val routeNodes = orderedPixels.mapIndexed { index, node ->
             RouteNode(id = index, point = Vec2(node.x, node.y))
         }
 
-        val startNode = resolveStart(routeNodes, flowDirectionModel)
-        val endNode = resolveEnd(routeNodes, flowDirectionModel)
+        val startNode = resolveStart(routeNodes, correctedFlowModel)
+        val endNode = resolveEnd(routeNodes, correctedFlowModel)
 
-        val segments = buildSegments(stripPathModel, routeNodes, flowDirectionModel.flowDirection)
+        val segments = buildSegments(stripPathModel, routeNodes, correctedFlowModel.flowDirection)
         val jumpConnections = buildJumpConnections(stripPathModel, routeNodes)
         val jumpNodeIds = jumpConnections.flatMap { listOf(it.fromNodeId, it.toNodeId) }.toSet()
         val jumpNodes = routeNodes.filter { it.id in jumpNodeIds }
@@ -38,9 +38,13 @@ class ReverseRouteBuilder {
             nearestReconnectUsed = jumpConnections.isNotEmpty(),
             islandsRespected = true,
             avoidedVoidCrossing = true,
-            installerFlowScore = flowDirectionModel.confidence,
+            installerFlowScore = correctedFlowModel.confidence,
             segmentCount = segments.size,
-            note = "Reverse route built from AUTO detection pipeline.",
+            note = if (correctedFlowModel.locked) {
+                "Reverse route built from AUTO detection pipeline (user flow lock applied)."
+            } else {
+                "Reverse route built from AUTO detection pipeline."
+            },
         )
 
         return RoutePlan(
@@ -59,17 +63,17 @@ class ReverseRouteBuilder {
         return if (direction == FlowDirection.REVERSE) ordered.reversed() else ordered
     }
 
-    private fun resolveStart(nodes: List<RouteNode>, flowDirectionModel: FlowDirectionModel): RouteNode {
+    private fun resolveStart(nodes: List<RouteNode>, correctedFlowModel: CorrectedFlowModel): RouteNode {
         if (nodes.isEmpty()) return RouteNode(0, Vec2(0f, 0f))
-        val target = flowDirectionModel.startNode
+        val target = correctedFlowModel.startNode
         return if (target == null) nodes.first() else {
             nodes.minByOrNull { n -> sq(n.point.x - target.x) + sq(n.point.y - target.y) } ?: nodes.first()
         }
     }
 
-    private fun resolveEnd(nodes: List<RouteNode>, flowDirectionModel: FlowDirectionModel): RouteNode {
+    private fun resolveEnd(nodes: List<RouteNode>, correctedFlowModel: CorrectedFlowModel): RouteNode {
         if (nodes.isEmpty()) return RouteNode(0, Vec2(0f, 0f))
-        val target = flowDirectionModel.endNode
+        val target = correctedFlowModel.endNode
         return if (target == null) nodes.last() else {
             nodes.minByOrNull { n -> sq(n.point.x - target.x) + sq(n.point.y - target.y) } ?: nodes.last()
         }
