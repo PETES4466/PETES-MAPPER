@@ -17,7 +17,7 @@ class ReverseRouteBuilder {
         pixelNodeMap: PixelNodeMap,
         correctedFlowModel: CorrectedFlowModel,
     ): RoutePlan {
-        val orderedPixels = orderByFlow(pixelNodeMap.nodes, correctedFlowModel.flowDirection)
+        val orderedPixels = orderByFlow(pixelNodeMap.nodes, correctedFlowModel)
         val routeNodes = orderedPixels.mapIndexed { index, node ->
             RouteNode(id = index, point = Vec2(node.x, node.y))
         }
@@ -58,13 +58,24 @@ class ReverseRouteBuilder {
         )
     }
 
-    private fun orderByFlow(nodes: List<PixelNode>, direction: FlowDirection): List<PixelNode> {
+    private fun orderByFlow(nodes: List<PixelNode>, correctedFlowModel: CorrectedFlowModel): List<PixelNode> {
         val ordered = nodes.sortedBy { it.index }
-        return if (direction == FlowDirection.REVERSE) ordered.reversed() else ordered
+        val flowOrdered = if (correctedFlowModel.flowDirection == FlowDirection.REVERSE) ordered.reversed() else ordered
+
+        if (!correctedFlowModel.locked || correctedFlowModel.startNode == null) return flowOrdered
+
+        val startIndexInOrdered = flowOrdered.indexOfFirst { node ->
+            sq(node.x - correctedFlowModel.startNode.x) + sq(node.y - correctedFlowModel.startNode.y) < 1f
+        }
+        if (startIndexInOrdered <= 0) return flowOrdered
+
+        // Preserve user-locked start exactly by rotating sequence to the corrected start anchor.
+        return flowOrdered.drop(startIndexInOrdered) + flowOrdered.take(startIndexInOrdered)
     }
 
     private fun resolveStart(nodes: List<RouteNode>, correctedFlowModel: CorrectedFlowModel): RouteNode {
         if (nodes.isEmpty()) return RouteNode(0, Vec2(0f, 0f))
+        if (correctedFlowModel.locked) return nodes.first()
         val target = correctedFlowModel.startNode
         return if (target == null) nodes.first() else {
             nodes.minByOrNull { n -> sq(n.point.x - target.x) + sq(n.point.y - target.y) } ?: nodes.first()
@@ -73,6 +84,7 @@ class ReverseRouteBuilder {
 
     private fun resolveEnd(nodes: List<RouteNode>, correctedFlowModel: CorrectedFlowModel): RouteNode {
         if (nodes.isEmpty()) return RouteNode(0, Vec2(0f, 0f))
+        if (correctedFlowModel.locked) return nodes.last()
         val target = correctedFlowModel.endNode
         return if (target == null) nodes.last() else {
             nodes.minByOrNull { n -> sq(n.point.x - target.x) + sq(n.point.y - target.y) } ?: nodes.last()
