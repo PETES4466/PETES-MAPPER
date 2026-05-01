@@ -90,16 +90,38 @@ class StripDetectionEngine {
     }
 
     private fun sampleBrightPathPoints(bitmap: Bitmap): List<Pair<Float, Float>> {
-        val points = mutableListOf<Pair<Float, Float>>()
+        val points = mutableListOf<SamplePoint>()
         val step = (minOf(bitmap.width, bitmap.height) / 180).coerceAtLeast(1)
         for (y in 0 until bitmap.height step step) {
             for (x in 0 until bitmap.width step step) {
                 val pixel = bitmap.getPixel(x, y)
                 val lum = luminance(pixel)
-                if (lum > 190f) points += x.toFloat() to y.toFloat()
+                if (lum > 190f) points += SamplePoint(x.toFloat(), y.toFloat(), lum)
             }
         }
-        return points.sortedWith(compareBy({ it.second }, { it.first }))
+        if (points.isEmpty()) return emptyList()
+        return chainNearestNeighbors(points)
+    }
+
+    private fun chainNearestNeighbors(points: List<SamplePoint>): List<Pair<Float, Float>> {
+        val remaining = points.toMutableList()
+        // Start from strongest brightness cluster representative (highest luminance sample).
+        var current = remaining.maxByOrNull { it.luminance } ?: return emptyList()
+        val ordered = ArrayList<Pair<Float, Float>>(remaining.size)
+        ordered += current.x to current.y
+        remaining.remove(current)
+
+        while (remaining.isNotEmpty()) {
+            val next = remaining.minByOrNull { candidate ->
+                val dx = candidate.x - current.x
+                val dy = candidate.y - current.y
+                (dx * dx) + (dy * dy)
+            } ?: break
+            ordered += next.x to next.y
+            remaining.remove(next)
+            current = next
+        }
+        return ordered
     }
 
     private fun classifySegment(points: List<Pair<Float, Float>>): StripSegmentType {
@@ -167,4 +189,10 @@ class StripDetectionEngine {
         val total = calculateStripLength(segments)
         return kotlin.math.ceil((total / defaultRollLength).toDouble()).toInt().coerceAtLeast(1)
     }
+
+    private data class SamplePoint(
+        val x: Float,
+        val y: Float,
+        val luminance: Float,
+    )
 }
