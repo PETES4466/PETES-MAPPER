@@ -8,6 +8,13 @@ import kotlin.math.ceil
 
 enum class PixelVoltage(val volts: Float) { V5(5f), V12(12f), V24(24f) }
 
+data class ControllerProfile(
+    val controllerType: ControllerType,
+    val portCount: Int,
+    val pixelsPerPort: Int,
+    val totalCapacity: Int,
+)
+
 data class ControllerMapEntry(
     val pixelIndex: Int,
     val x: Float,
@@ -109,7 +116,12 @@ class ControllerMapExportEngine {
         require(pixelSpacing > 0f) { "pixelSpacing must be > 0" }
 
         val orderedPixels = orderedPointsByFinalRoute(routePlan)
-        val channelCapacity = if (controllerType == ControllerType.T1000) Int.MAX_VALUE else 512
+        val profile = controllerProfile(controllerType)
+        require(orderedPixels.size <= profile.totalCapacity) {
+            "Route pixel count ${orderedPixels.size} exceeds ${profile.controllerType} capacity ${profile.totalCapacity}"
+        }
+
+        val channelCapacity = profile.pixelsPerPort
         val zoneSize = estimateZoneSize(pixelSpacing)
 
         val entries = mutableListOf<ControllerMapEntry>()
@@ -203,6 +215,21 @@ class ControllerMapExportEngine {
     private fun estimateZoneSize(pixelSpacing: Float): Int {
         val base = if (pixelSpacing <= 0.35f) 75 else if (pixelSpacing <= 0.75f) 100 else 125
         return ceil(base.toDouble()).toInt()
+    }
+
+    private fun controllerProfile(controllerType: ControllerType): ControllerProfile = when (controllerType) {
+        ControllerType.T1000 -> ControllerProfile(
+            controllerType = ControllerType.T1000,
+            portCount = 1,
+            pixelsPerPort = 2048,
+            totalCapacity = 2048,
+        )
+        ControllerType.T8000 -> ControllerProfile(
+            controllerType = ControllerType.T8000,
+            portCount = 8,
+            pixelsPerPort = 1024,
+            totalCapacity = 8192,
+        )
     }
 
     private fun fmt(v: Float): String = "%.6f".format(v)
