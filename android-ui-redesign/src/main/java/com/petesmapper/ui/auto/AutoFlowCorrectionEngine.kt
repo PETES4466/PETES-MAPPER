@@ -17,6 +17,7 @@ class AutoFlowCorrectionEngine {
         pixelNodeMap: PixelNodeMap,
         startIndex: Int,
     ): CorrectedFlowModel {
+        if (current.locked) return current
         val start = pixelNodeMap.nodes.getOrNull(startIndex) ?: return current
         val updatedDirection = inferDirection(start, current.endNode, current.flowDirection)
         return current.copy(startNode = start, flowDirection = updatedDirection, confidence = recalcConfidence(start, current.endNode, pixelNodeMap))
@@ -27,12 +28,14 @@ class AutoFlowCorrectionEngine {
         pixelNodeMap: PixelNodeMap,
         endIndex: Int,
     ): CorrectedFlowModel {
+        if (current.locked) return current
         val end = pixelNodeMap.nodes.getOrNull(endIndex) ?: return current
         val updatedDirection = inferDirection(current.startNode, end, current.flowDirection)
         return current.copy(endNode = end, flowDirection = updatedDirection, confidence = recalcConfidence(current.startNode, end, pixelNodeMap))
     }
 
     fun reverseFlow(current: CorrectedFlowModel): CorrectedFlowModel {
+        if (current.locked) return current
         val reversed = when (current.flowDirection) {
             FlowDirection.FORWARD -> FlowDirection.REVERSE
             FlowDirection.REVERSE -> FlowDirection.FORWARD
@@ -42,6 +45,7 @@ class AutoFlowCorrectionEngine {
     }
 
     fun swapStartEnd(current: CorrectedFlowModel): CorrectedFlowModel {
+        if (current.locked) return current
         val swappedDirection = when (current.flowDirection) {
             FlowDirection.FORWARD -> FlowDirection.REVERSE
             FlowDirection.REVERSE -> FlowDirection.FORWARD
@@ -57,6 +61,10 @@ class AutoFlowCorrectionEngine {
 
     fun lockFlow(current: CorrectedFlowModel, locked: Boolean = true): CorrectedFlowModel {
         return current.copy(locked = locked)
+    }
+
+    fun unlockFlow(current: CorrectedFlowModel): CorrectedFlowModel {
+        return current.copy(locked = false)
     }
 
     fun fromDetected(model: FlowDirectionModel): CorrectedFlowModel {
