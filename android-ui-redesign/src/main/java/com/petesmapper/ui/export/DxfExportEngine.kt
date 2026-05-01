@@ -72,16 +72,10 @@ class DxfExportEngine {
 
     private fun exportJumpWires(out: DxfBuilder, plan: RoutePlan) {
         val index = plan.orderedRouteNodes.associateBy { it.id }
-        if (plan.jumpConnections.isNotEmpty()) {
-            plan.jumpConnections.forEach { jump ->
-                val from = index[jump.fromNodeId]?.point ?: return@forEach
-                val to = index[jump.toNodeId]?.point ?: return@forEach
-                out.line(layer = "JUMP_WIRES", a = from, b = to)
-            }
-            return
-        }
-        plan.jumpNodes.zipWithNext().forEach { (a, b) ->
-            out.line(layer = "JUMP_WIRES", a = a.point, b = b.point)
+        plan.effectiveJumpConnections().forEach { jump ->
+            val from = index[jump.fromNodeId]?.point ?: return@forEach
+            val to = index[jump.toNodeId]?.point ?: return@forEach
+            out.line(layer = "JUMP_WIRES", a = from, b = to)
         }
     }
 

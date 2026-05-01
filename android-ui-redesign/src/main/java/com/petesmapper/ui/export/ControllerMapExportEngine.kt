@@ -191,12 +191,8 @@ class ControllerMapExportEngine {
             return routePlan.orderedRouteNodes.map { PointInfo(it.point, RouteSegmentType.LOOP, false, -1) }
         }
         val nodeById = routePlan.orderedRouteNodes.associateBy { it.id }
-        val jumpPoints = if (routePlan.jumpConnections.isNotEmpty()) {
-            routePlan.jumpConnections.flatMap { jc ->
-                listOfNotNull(nodeById[jc.fromNodeId]?.point, nodeById[jc.toNodeId]?.point)
-            }
-        } else {
-            routePlan.jumpNodes.map { it.point }
+        val jumpPoints = routePlan.effectiveJumpConnections().flatMap { jc ->
+            listOfNotNull(nodeById[jc.fromNodeId]?.point, nodeById[jc.toNodeId]?.point)
         }
         val pointInfos = mutableListOf<PointInfo>()
         routePlan.routeSegments.forEachIndexed { segIndex, segment ->

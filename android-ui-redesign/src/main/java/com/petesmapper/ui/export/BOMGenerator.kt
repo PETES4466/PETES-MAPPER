@@ -207,12 +207,7 @@ class BOMGenerator {
     }
 
     private fun computeJumperLength(routePlan: RoutePlan): Float {
-        if (routePlan.jumpConnections.isNotEmpty()) {
-            return routePlan.jumpConnections.sumOf { it.wireLength.toDouble() }.toFloat()
-        }
-        return routePlan.jumpNodes.zipWithNext().sumOf { (a, b) ->
-            distance(a.point, b.point).toDouble()
-        }.toFloat()
+        return routePlan.effectiveJumpConnections().sumOf { it.wireLength.toDouble() }.toFloat()
     }
 
     private fun estimateInjectionWireLength(map: ControllerMapExport, spacing: Float): Float {

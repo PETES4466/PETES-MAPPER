@@ -52,7 +52,18 @@ data class RoutePlan(
     val jumpConnections: List<JumpConnection> = emptyList(),
     val routeSegments: List<RouteSegment>,
     val metadata: RouteMetadata,
-)
+) {
+    fun effectiveJumpConnections(): List<JumpConnection> {
+        if (jumpConnections.isNotEmpty()) return jumpConnections
+        return jumpNodes.zipWithNext().map { (from, to) ->
+            JumpConnection(
+                fromNodeId = from.id,
+                toNodeId = to.id,
+                wireLength = distance(from.point, to.point),
+            )
+        }
+    }
+}
 
 class ContourWalker(private val contours: List<Contour>) {
     fun walkContour(contourIndex: Int, startPointIndex: Int = 0, clockwise: Boolean = true): List<Vec2> {
