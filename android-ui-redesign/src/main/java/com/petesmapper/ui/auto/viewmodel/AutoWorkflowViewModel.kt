@@ -1,6 +1,8 @@
 package com.petesmapper.ui.auto.viewmodel
 
 import androidx.lifecycle.ViewModel
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.petesmapper.ui.auto.AutoExportBridge
 import com.petesmapper.ui.auto.AutoExportBundle
 import com.petesmapper.ui.auto.AutoFlowCorrectionEngine
@@ -15,10 +17,20 @@ import com.petesmapper.ui.auto.PixelNodeMap
 import com.petesmapper.ui.auto.ReverseRouteBuilder
 import com.petesmapper.ui.auto.StripDetectionEngine
 import com.petesmapper.ui.auto.StripPathModel
+import com.petesmapper.ui.export.AutoSaveEngine
+import com.petesmapper.ui.export.ControllerType
 import com.petesmapper.ui.export.PricingInput
+import com.petesmapper.ui.export.ProjectPersistenceEngine
+import com.petesmapper.ui.export.SavedBomState
+import com.petesmapper.ui.export.SavedControllerState
+import com.petesmapper.ui.export.SavedProject
+import com.petesmapper.ui.export.SavedProjectMetadata
+import com.petesmapper.ui.export.SavedQuoteState
+import com.petesmapper.ui.export.SavedRouteState
 import com.petesmapper.ui.geometry.RoutePlan
 import com.petesmapper.ui.viewmodel.ProjectUiState
 import java.io.File
+import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -47,6 +59,11 @@ class AutoWorkflowViewModel : ViewModel() {
     private val reverseRouteBuilder = ReverseRouteBuilder()
     private val autoValidationEngine = AutoValidationEngine()
     private val autoExportBridge = AutoExportBridge()
+    private val gson: Gson = GsonBuilder().create()
+    private val storageRoot = File(System.getProperty("java.io.tmpdir"), "petes-auto")
+    private val persistenceEngine = ProjectPersistenceEngine(storageRoot)
+    private val autoSaveEngine = AutoSaveEngine(persistenceEngine, storageRoot)
+    private val workflowStateFile = File(storageRoot, "auto_workflow_state.json")
 
     fun setNormalizedImage(v: NormalizedImage) = _state.update {
         it.copy(normalizedImage = v, stripPathModel = null, pixelNodeMap = null, flowDirectionModel = null, correctedFlowModel = null, routePlan = null, autoValidationReport = null, autoExportBundle = null)
@@ -110,10 +127,19 @@ class AutoWorkflowViewModel : ViewModel() {
     fun autoSaveSnapshot() {
         snapshots.addLast(_state.value.copy())
         while (snapshots.size > 10) snapshots.removeFirst()
+        storageRoot.mkdirs()
+        workflowStateFile.writeText(gson.toJson(_state.value))
+        _state.value.toSavedProjectOrNull()?.let { runCatching { autoSaveEngine.autoSave(it) } }
     }
 
     fun restoreWorkflow() {
-        snapshots.lastOrNull()?.let { _state.value = it }
+        snapshots.lastOrNull()?.let { _state.value = it; return }
+        if (workflowStateFile.exists()) {
+            runCatching { gson.fromJson(workflowStateFile.readText(), AutoWorkflowState::class.java) }
+                .getOrNull()
+                ?.let { _state.value = it; return }
+        }
+        runCatching { autoSaveEngine.restoreLatestSnapshot(AUTO_WORKFLOW_PROJECT_ID) }.getOrNull()
     }
 
     fun resetFromStep(step: Int) {
@@ -129,5 +155,40 @@ class AutoWorkflowViewModel : ViewModel() {
                 else -> it
             }
         }
+    }
+
+    private fun AutoWorkflowState.toSavedProjectOrNull(): SavedProject? {
+        val plan = routePlan ?: return null
+        val bundle = autoExportBundle ?: return null
+        val now = Instant.now().toString()
+        return SavedProject(
+            metadata = SavedProjectMetadata(
+                projectId = AUTO_WORKFLOW_PROJECT_ID,
+                projectName = "AUTO Workflow",
+                createdAt = now,
+                updatedAt = now,
+                version = ProjectPersistenceEngine.CURRENT_SCHEMA_VERSION,
+            ),
+            projectUiState = ProjectUiState(projectName = "AUTO Workflow"),
+            savedRouteState = SavedRouteState(
+                routePlan = plan,
+                selectedMode = "AUTO",
+                selectedPattern = "AUTO_PIPELINE",
+                lockedSegments = emptySet(),
+                jumpConnections = plan.jumpConnections,
+                manualModified = correctedFlowModel != null,
+            ),
+            savedControllerState = SavedControllerState(
+                controllerMapExport = bundle.controllerMapExport,
+                controllerType = if (bundle.controllerMapExport.controllerType == ControllerType.T8000) ControllerType.T8000 else ControllerType.T1000,
+                portUsage = bundle.billOfMaterials.controllerRequirement.portUsage,
+            ),
+            savedBomState = SavedBomState(bundle.billOfMaterials),
+            savedQuoteState = SavedQuoteState(bundle.quotation, PricingInput(0f,0f,0f,0f,0f,0f,0f,0f,0f,0f,0f,0f,0f)),
+        )
+    }
+
+    companion object {
+        private const val AUTO_WORKFLOW_PROJECT_ID = "AUTO_WORKFLOW_SNAPSHOT"
     }
 }
