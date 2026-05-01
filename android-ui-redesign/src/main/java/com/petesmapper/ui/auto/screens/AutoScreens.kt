@@ -25,7 +25,6 @@ fun AutoLandingScreen(vm: AutoWorkflowViewModel) {
     }
 }
 
-@Composable fun AutoImagePrepScreen(vm: AutoWorkflowViewModel) = ScreenShell("Image Prep") { StepActions() }
 @Composable fun AutoStripDetectionScreen(vm: AutoWorkflowViewModel) = ScreenShell("Strip Detection") { OverlayHints("Strip path overlay") }
 @Composable fun AutoPixelDetectionScreen(vm: AutoWorkflowViewModel) = ScreenShell("Pixel Detection") { OverlayHints("Pixel nodes overlay") }
 @Composable fun AutoFlowCorrectionScreen(vm: AutoWorkflowViewModel) = ScreenShell("Flow Correction") { OverlayHints("Start/End + tap selection") }
