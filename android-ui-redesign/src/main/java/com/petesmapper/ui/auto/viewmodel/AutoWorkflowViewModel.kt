@@ -13,6 +13,7 @@ import com.petesmapper.ui.auto.FlowDirectionEngine
 import com.petesmapper.ui.auto.FlowDirectionModel
 import com.petesmapper.ui.auto.NormalizedImage
 import com.petesmapper.ui.auto.PixelDetectionEngine
+import com.petesmapper.ui.auto.PixelNode
 import com.petesmapper.ui.auto.PixelNodeMap
 import com.petesmapper.ui.auto.ReverseRouteBuilder
 import com.petesmapper.ui.auto.StripDetectionEngine
@@ -82,6 +83,11 @@ class AutoWorkflowViewModel : ViewModel() {
         val strip = s.stripPathModel ?: return
         val pixels = pixelDetectionEngine.detectPixelNodes(image, strip)
         _state.update { it.copy(pixelNodeMap = pixels, flowDirectionModel = null, correctedFlowModel = null, routePlan = null, autoValidationReport = null, autoExportBundle = null) }
+        autoSaveSnapshot()
+    }
+
+    fun setPixelNodeMapForUi(nodes: List<PixelNode>, averageSpacing: Float) {
+        _state.update { it.copy(pixelNodeMap = PixelNodeMap(nodes = nodes, totalPixels = nodes.size, averageSpacing = averageSpacing), flowDirectionModel = null, correctedFlowModel = null, routePlan = null, autoValidationReport = null, autoExportBundle = null) }
         autoSaveSnapshot()
     }
 
