@@ -72,10 +72,16 @@ class DxfExportEngine {
 
     private fun exportJumpWires(out: DxfBuilder, plan: RoutePlan) {
         val index = plan.orderedRouteNodes.associateBy { it.id }
-        plan.jumpNodes.forEach { jump ->
-            val node = index[jump.id] ?: return@forEach
-            val next = nearestOtherNode(node, plan.orderedRouteNodes) ?: return@forEach
-            out.line(layer = "JUMP_WIRES", a = node.point, b = next.point)
+        if (plan.jumpConnections.isNotEmpty()) {
+            plan.jumpConnections.forEach { jump ->
+                val from = index[jump.fromNodeId]?.point ?: return@forEach
+                val to = index[jump.toNodeId]?.point ?: return@forEach
+                out.line(layer = "JUMP_WIRES", a = from, b = to)
+            }
+            return
+        }
+        plan.jumpNodes.zipWithNext().forEach { (a, b) ->
+            out.line(layer = "JUMP_WIRES", a = a.point, b = b.point)
         }
     }
 
@@ -110,13 +116,6 @@ class DxfExportEngine {
     private fun marker(out: DxfBuilder, layer: String, node: RouteNode, label: String) {
         out.circle(layer = layer, center = node.point, radius = 0.08)
         out.text(layer = layer, point = node.point, text = label)
-    }
-
-    private fun nearestOtherNode(node: RouteNode, nodes: List<RouteNode>): RouteNode? {
-        return nodes
-            .asSequence()
-            .filter { it.id != node.id }
-            .minByOrNull { (it.point.x - node.point.x).absoluteValue + (it.point.y - node.point.y).absoluteValue }
     }
 
     private fun closeIfNeeded(points: List<Vec2>): List<Vec2> {

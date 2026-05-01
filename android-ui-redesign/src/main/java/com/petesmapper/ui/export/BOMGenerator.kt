@@ -207,11 +207,11 @@ class BOMGenerator {
     }
 
     private fun computeJumperLength(routePlan: RoutePlan): Float {
-        val ordered = routePlan.orderedRouteNodes.associateBy { it.id }
-        return routePlan.jumpNodes.sumOf { j ->
-            val p1 = ordered[j.id]?.point ?: j.point
-            val p2 = routePlan.endNode.point
-            distance(p1, p2).toDouble()
+        if (routePlan.jumpConnections.isNotEmpty()) {
+            return routePlan.jumpConnections.sumOf { it.wireLength.toDouble() }.toFloat()
+        }
+        return routePlan.jumpNodes.zipWithNext().sumOf { (a, b) ->
+            distance(a.point, b.point).toDouble()
         }.toFloat()
     }
 

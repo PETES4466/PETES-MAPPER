@@ -29,6 +29,7 @@ enum class EntryMode {
 
 data class RouteSegment(val type: RouteSegmentType, val contourIndex: Int, val points: List<Vec2>)
 data class RouteNode(val id: Int, val point: Vec2)
+data class JumpConnection(val fromNodeId: Int, val toNodeId: Int, val wireLength: Float)
 
 data class RouteMetadata(
     val patternId: RoutePatternId,
@@ -48,6 +49,7 @@ data class RoutePlan(
     val startNode: RouteNode,
     val endNode: RouteNode,
     val jumpNodes: List<RouteNode>,
+    val jumpConnections: List<JumpConnection> = emptyList(),
     val routeSegments: List<RouteSegment>,
     val metadata: RouteMetadata,
 )
@@ -106,7 +108,7 @@ class RoutePatternLibrary(
 
         if (contours.isEmpty()) {
             val n = RouteNode(0, Vec2(0f, 0f))
-            return RoutePlan(listOf(n), n, n, emptyList(), emptyList(),
+            return RoutePlan(listOf(n), n, n, emptyList(), emptyList(), emptyList(),
                 RouteMetadata(RoutePatternId.RPL_LINEAR, result.shapeClass, true, true, false, true, true, 0f, 0, "No contours."))
         }
 
@@ -133,7 +135,14 @@ class RoutePatternLibrary(
             note = "Contour topology traversal for installer fidelity.",
         )
 
-        return RoutePlan(nodes, nodes.first(), nodes.last(), jumps, segments, metadata)
+        val jumpConnections = jumps.zipWithNext().map { (a, b) ->
+            JumpConnection(
+                fromNodeId = a.id,
+                toNodeId = b.id,
+                wireLength = distance(a.point, b.point),
+            )
+        }
+        return RoutePlan(nodes, nodes.first(), nodes.last(), jumps, jumpConnections, segments, metadata)
     }
 
     private fun selectPattern(shapeClass: ShapeClass, features: GeometryFeatures): RoutePatternId = when (shapeClass) {
